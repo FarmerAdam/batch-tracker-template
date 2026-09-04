@@ -1088,7 +1088,7 @@ const STATE_ORDER = ["incubating","fruiting","complete","packed","contaminated",
 
 let batches=[], movements=[], harvests=[], costs=[], batchNotes=[];
 let zones=[], bays=[], placements=[];
-let yieldDefaults=[]; // read-only — owned by Chef Orders (mn_yield_defaults), used here for harvest-timing ETAs
+let yieldDefaults=[]; // per-species yield & harvest-timing defaults (mn_yield_defaults), used for harvest ETAs
 let currentBatchId=null, editingId=null;
 let roomMode="view", placeBatchId=null, pendingPlaceSel=new Set(), placeDate=null;
 let removeSel=new Set();
@@ -1212,12 +1212,12 @@ function batchCounts(b){
 }
 function yieldFor(species){ return yieldDefaults.find(y=>y.species===species) || null; }
 async function applyHarvestSuggestion(species, lo, hi){
-  if(!confirm(`Update Chef Orders' "days to harvest" for ${species} to ${lo}\u2013${hi} days, based on your real harvest data? This changes what the Chef Orders availability board treats as ready.`)) return;
+  if(!confirm(`Update your "days to harvest" default for ${species} to ${lo}\u2013${hi} days, based on your real harvest data?`)) return;
   const {error} = await db.from("mn_yield_defaults").update({days_to_harvest_low:lo, days_to_harvest_high:hi, updated_at:new Date().toISOString()}).eq("species",species);
   if(error){ alert("Couldn't update — "+error.message); return; }
   await loadAll();
 }
-/* Same per-cohort FIFO approach as Chef Orders: a batch is often stocked into
+/* Per-cohort FIFO approach: a batch is often stocked into
    fruiting in stages (e.g. 12 blocks Monday, more Wed/Thu from the same
    inoculation), so each "move to fruiting" event gets its own start date.
    Blocks that later leave fruiting are assumed to deplete the earliest-
@@ -1237,7 +1237,7 @@ function fruitingCohorts(batchId){
   return inflow.filter(c=>c.remaining>0);
 }
 /* Harvest-timing ETA for a batch's still-standing fruiting cohorts, using the
-   species' days_to_harvest range from Chef Orders' settings. Returns null if
+   species' days_to_harvest range from your yield defaults. Returns null if
    no cohorts are fruiting, or no timing data exists yet for this species. */
 function harvestEta(b){
   const yd = yieldFor(b.species);
@@ -1417,7 +1417,7 @@ async function loadAll(){
     zones=z.error?[]:z.data; bays=ba.error?[]:ba.data; placements=pl.error?[]:pl.data;
     if(z.error) console.warn("Room tables not found yet — run setup_room.sql.",z.error);
     yieldDefaults = yd.error ? [] : yd.data;
-    if(yd.error) console.warn("Yield defaults (Chef Orders table) not readable yet — harvest ETA badges will be hidden.",yd.error);
+    if(yd.error) console.warn("Yield defaults table not readable yet — harvest ETA badges will be hidden.",yd.error);
     batchNotes = bn.error ? [] : bn.data;
     if(bn.error) console.warn("mn_batch_notes table not found yet — growth/observation notes will be hidden.",bn.error);
     cache(); setSync("ok","Synced");
@@ -3196,7 +3196,7 @@ function renderAnalytics(){
       if(b.ready_date) readyDays.push(daysBetween(b.inoc_date,b.ready_date));
       // learn actual fruiting→harvest timing: first harvest logged on/after this
       // batch's first move-to-fruiting date, compared against the manually-set
-      // days_to_harvest range in Chef Orders' settings
+      // days_to_harvest range in your yield defaults
       if(ff){
         const firstHarvestAfter = harvests.filter(h=>h.batch_id===b.id && h.harvest_date>=ff).map(h=>h.harvest_date).sort()[0];
         if(firstHarvestAfter) harvestGapDays.push(daysBetween(ff,firstHarvestAfter));
@@ -3252,7 +3252,7 @@ function renderAnalytics(){
       <td>${r.packed||"0"}</td>
       <td>${fmtWeight(r.yld)}</td>
       ${bd?`<td>${r.avgFruit??"—"}</td>
-      <td>${r.avgHarvestGap!=null?r.avgHarvestGap+` days (n=${r.harvestGapN})`:"—"}${r.harvestSuggestion?`<div style="margin-top:4px"><button class="btn btn-sm btn-primary" title="Chef Orders is currently set to ${r.harvestSuggestion.configuredLo}–${r.harvestSuggestion.configuredHi} days" onclick="applyHarvestSuggestion('${spEsc}',${r.harvestSuggestion.lo},${r.harvestSuggestion.hi})">Update to ${r.harvestSuggestion.lo}–${r.harvestSuggestion.hi}d?</button></div>`:""}</td>
+      <td>${r.avgHarvestGap!=null?r.avgHarvestGap+` days (n=${r.harvestGapN})`:"—"}${r.harvestSuggestion?`<div style="margin-top:4px"><button class="btn btn-sm btn-primary" title="Currently set to ${r.harvestSuggestion.configuredLo}–${r.harvestSuggestion.configuredHi} days" onclick="applyHarvestSuggestion('${spEsc}',${r.harvestSuggestion.lo},${r.harvestSuggestion.hi})">Update to ${r.harvestSuggestion.lo}–${r.harvestSuggestion.hi}d?</button></div>`:""}</td>
       <td>${r.avgReady!=null?r.avgReady+` (n=${r.readyCount})`:"—"}</td>
       <td>${r.avgComplete??"—"}</td>
       <td>${r.subKg>0?(r.subKg%1?r.subKg.toFixed(1):r.subKg)+" kg":"—"}</td>
@@ -3267,7 +3267,7 @@ function renderAnalytics(){
       <td>${r.packed?money(r.packedRevenue):"—"}</td>
     </tr>`;}).join("")}
   </table></div>${anyMissing?infoBannerHTML("analyticsWeightMissing", `* Some batches don't have block weights recorded, so their substrate cost isn't counted — those species' cost/kg and efficiency are understated until you edit the batch and add block sizes.`, "margin-top:12px"):""}
-  ${infoBannerHTML("analyticsHarvestLearning", `"Fruiting → harvest (actual)" learns from your own data — once at least 3 harvests are logged for a species and the real timing meaningfully differs from what's configured in Chef Orders, you'll see an "Update to Xd?" button here. Nothing changes automatically; it's a suggestion you approve.`, "margin-top:12px")}`;
+  ${infoBannerHTML("analyticsHarvestLearning", `"Fruiting → harvest (actual)" learns from your own data — once at least 3 harvests are logged for a species and the real timing meaningfully differs from what's configured in your yield defaults, you'll see an "Update to Xd?" button here. Nothing changes automatically; it's a suggestion you approve.`, "margin-top:12px")}`;
 }
 
 /* ================= COSTS ================= */
