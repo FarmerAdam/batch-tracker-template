@@ -27,6 +27,13 @@ steps get reached, nothing about your farm or your Supabase project, which
 never leaves your own account. Delete the `<script data-goatcounter...>` tag
 near the top of either file if you'd rather run with none at all.
 
+## Support
+
+This is free and gifted with no strings attached - no account of mine, no
+subscription, nothing to maintain on your end. If it saves you real time and
+you'd like to say thanks, there's a Ko-fi: **[ko-fi.com/farmeradam](https://ko-fi.com/farmeradam)**.
+Entirely optional, never required to use or deploy this.
+
 ## License
 
 MIT, provided as-is with no warranty - see [`LICENSE`](LICENSE).
