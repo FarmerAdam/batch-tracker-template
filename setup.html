@@ -58,6 +58,10 @@ code{background:#F0ECE1;padding:1px 6px;border-radius:4px;font-family:var(--mono
 .done-badge.show{display:inline-flex;align-items:center;gap:4px}
 section.step h2{position:relative}
 footer.page{text-align:center;color:var(--muted);font-size:12px;margin-top:20px}
+.visit-counter{display:none;align-items:baseline;justify-content:center;gap:8px;margin:24px 0 4px;padding:14px;background:var(--card);border:1px solid var(--line);border-radius:10px}
+.visit-counter.show{display:flex}
+.visit-counter .count{font-family:var(--mono);font-size:22px;font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums}
+.visit-counter .label{font-size:12px;color:var(--muted)}
 </style>
 </head>
 <body>
@@ -131,6 +135,11 @@ footer.page{text-align:center;color:var(--muted);font-size:12px;margin-top:20px}
     </ol>
     <p class="hint">config.js holds your anon key - that's meant to be public/client-visible, it's the Row Level Security rules from Step 2 that actually protect your data, not secrecy of this key.</p>
   </section>
+
+  <div class="visit-counter" id="visitCounter">
+    <span class="count" id="visitCounterNum"></span>
+    <span class="label">interactions tracked on this template so far</span>
+  </div>
 
   <footer class="page">
     <p>Stuck on something? Paste <code>SETUP-WITH-AI.md</code> to Claude or ChatGPT for step-by-step troubleshooting.</p>
@@ -318,6 +327,21 @@ function track(eventName) {
     }
   } catch (e) {}
 }
+
+// Public counter widget (goatcounter.com/help/visitor-counter) - stays
+// hidden if the maintainer hasn't turned on "Allow adding visitor counts on
+// your website" in their GoatCounter site settings, or if the request fails
+// for any reason (no error shown to visitors either way).
+(async () => {
+  try {
+    const res = await fetch("https://mm-batch-tracker.goatcounter.com/counter/TOTAL.json");
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data.count) return;
+    document.getElementById("visitCounterNum").textContent = data.count;
+    document.getElementById("visitCounter").classList.add("show");
+  } catch (e) {}
+})();
 
 document.getElementById("copySqlBtn").addEventListener("click", async () => {
   const statusEl = document.getElementById("copyStatus");
