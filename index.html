@@ -441,7 +441,15 @@ td.neg{color:var(--danger);font-weight:700} td.pos{color:var(--st-complete);font
 #roomTopBar{position:sticky;top:var(--header-h,92px);z-index:40;background:var(--bg);padding-top:2px;padding-bottom:4px}
 #placeBanner .note-banner{margin-bottom:14px;box-shadow:0 3px 10px rgba(42,36,27,.14)}
 [data-theme="dark"] #placeBanner .note-banner{box-shadow:0 3px 10px rgba(0,0,0,.35)}
-.zone{margin-bottom:22px}
+/* Room (2026-09-04) - the new top-level grouping above zones (FC1, FC2,
+   Shiitake Chamber...), each containing its own zones/walls/bays. One
+   level up from .zone visually: a bolder rust-accent rule + more
+   breathing room, so Room reads as the outer container and Zone as the
+   thing nested inside it, not two equally-weighted headings. */
+.room-block{margin-bottom:36px}
+.room-block-head{border-bottom:3px solid var(--rust);padding-bottom:8px;margin-bottom:18px}
+.room-block-head h1{font-size:24px}
+.zone{margin-bottom:22px;margin-left:4px}
 .zone-head{display:flex;align-items:baseline;gap:10px;margin-bottom:10px;padding-bottom:6px;border-bottom:2px solid var(--line)}
 .zone-head h2{font-size:18px;text-transform:uppercase;letter-spacing:.6px}
 .zone-head .zmeta{font-size:12px;color:var(--muted)}
@@ -500,6 +508,13 @@ td.neg{color:var(--danger);font-weight:700} td.pos{color:var(--st-complete);font
 }
 
 /* setup */
+/* Room container (2026-09-04) - one level up from .setup-zone, same
+   pattern as .room-block/.zone in the main Room view: a bolder outer
+   card + rust accent so it's visually obvious zones/bays nest inside a
+   room, not sitting alongside it. */
+.setup-room{background:var(--surface-2);border:1px solid var(--rust);border-radius:var(--radius);padding:16px;margin-bottom:22px}
+.setup-room-head{margin-bottom:12px}
+.setup-room-head b{font-size:17px}
 .setup-zone{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px;margin-bottom:14px}
 .setup-zone .zrow{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:12px}
 .setup-zone .zrow>div{flex:1;min-width:120px}
@@ -631,7 +646,7 @@ td.neg{color:var(--danger);font-weight:700} td.pos{color:var(--st-complete);font
     <button class="btn btn-sm" onclick="showView('room')">← Back to room</button>
     <h2 style="font-size:22px">Room setup</h2>
   </div>
-  <div class="note-banner">Add a room for each physical grow space — FC1, Shiitake Chamber, Oyster Room, whatever matches how you actually think about your farm. Split a room into sections (Wall 1, Wall 2, Centre island) if that's useful too - a "room" here is really just a named group of bays, so it works either way. Then add bays to each. Each bay's rows become letters (A, B, C…) and slots run left to right. Edit any number any time — existing placements stay put.</div>
+  <div class="note-banner">Three levels: add a <b>room</b> for each physical grow space (FC1, FC2, Shiitake Chamber, Oyster Room…), a <b>zone</b> inside it for each wall/section/shelf unit (Wall 1, Wall 2, Centre island…), then <b>bays</b> inside each zone. Each bay's rows become letters (A, B, C…) and slots run left to right. Edit any number any time — existing placements stay put.</div>
   <div id="setupWrap"></div>
   <div id="setupActions" style="margin-top:14px"></div>
 </section>
@@ -1092,7 +1107,7 @@ const STATES = {
 const STATE_ORDER = ["incubating","fruiting","complete","packed","contaminated","failed","culled"];
 
 let batches=[], movements=[], harvests=[], costs=[], batchNotes=[];
-let zones=[], bays=[], placements=[];
+let rooms=[], zones=[], bays=[], placements=[];
 let yieldDefaults=[]; // per-species yield & harvest-timing defaults (mn_yield_defaults), used for harvest ETAs
 let currentBatchId=null, editingId=null;
 let roomMode="view", placeBatchId=null, pendingPlaceSel=new Set(), placeDate=null;
@@ -1400,17 +1415,18 @@ function resolvedBatchCost(b){
 }
 
 /* ================= DATA ================= */
-function cache(){ try{ localStorage.setItem("mn_cache", JSON.stringify({batches,movements,harvests,costs,zones,bays,placements,yieldDefaults,batchNotes})); }catch(e){} }
-function loadCache(){ try{ const d=JSON.parse(localStorage.getItem("mn_cache")); if(d){batches=d.batches||[];movements=d.movements||[];harvests=d.harvests||[];costs=d.costs||[];zones=d.zones||[];bays=d.bays||[];placements=d.placements||[];yieldDefaults=d.yieldDefaults||[];batchNotes=d.batchNotes||[];} }catch(e){} }
+function cache(){ try{ localStorage.setItem("mn_cache", JSON.stringify({batches,movements,harvests,costs,rooms,zones,bays,placements,yieldDefaults,batchNotes})); }catch(e){} }
+function loadCache(){ try{ const d=JSON.parse(localStorage.getItem("mn_cache")); if(d){batches=d.batches||[];movements=d.movements||[];harvests=d.harvests||[];costs=d.costs||[];rooms=d.rooms||[];zones=d.zones||[];bays=d.bays||[];placements=d.placements||[];yieldDefaults=d.yieldDefaults||[];batchNotes=d.batchNotes||[];} }catch(e){} }
 
 async function loadAll(){
   setSync("","Syncing…");
   try{
-    const [b,m,h,c,z,ba,pl,yd,bn] = await Promise.all([
+    const [b,m,h,c,rm,z,ba,pl,yd,bn] = await Promise.all([
       db.from("mn_batches").select("*").order("batch_no",{ascending:false}),
       db.from("mn_movements").select("*"),
       db.from("mn_harvests").select("*"),
       db.from("mn_costs").select("*"),
+      db.from("mn_rooms").select("*").order("sort_order"),
       db.from("mn_zones").select("*").order("sort_order"),
       db.from("mn_bays").select("*").order("sort_order"),
       db.from("mn_placements").select("*"),
@@ -1419,7 +1435,14 @@ async function loadAll(){
     ]);
     if(b.error||m.error||h.error||c.error) throw (b.error||m.error||h.error||c.error);
     batches=b.data; movements=m.data; harvests=h.data; costs=c.data;
+    // mn_rooms (2026-09-04) - the Room > Zone > Bay hierarchy Adam actually
+    // wants (FC1/FC2 etc, each with its own walls/sections/bays). Same
+    // graceful-degradation pattern as mn_zones below: falls back to []
+    // rather than breaking the whole sync if the migration (new mn_rooms
+    // table + mn_zones.room_id column) hasn't been run yet.
+    rooms=rm.error?[]:rm.data;
     zones=z.error?[]:z.data; bays=ba.error?[]:ba.data; placements=pl.error?[]:pl.data;
+    if(rm.error) console.warn("mn_rooms table not found yet — run the Room migration SQL.",rm.error);
     if(z.error) console.warn("Room tables not found yet — run setup_room.sql.",z.error);
     yieldDefaults = yd.error ? [] : yd.data;
     if(yd.error) console.warn("Yield defaults table not readable yet — harvest ETA badges will be hidden.",yd.error);
@@ -2130,6 +2153,7 @@ function showQR(id){
 /* ================= ROOM / FRUITING CHAMBER ================= */
 const rowLetter = i => { let s=""; i++; while(i>0){ i--; s=String.fromCharCode(65+(i%26))+s; i=Math.floor(i/26);} return s; };
 const baysOf = z => bays.filter(b=>b.zone_id===z.id).sort((a,b)=>(a.sort_order-b.sort_order)||(a.bay_no-b.bay_no));
+const zonesOf = r => zones.filter(z=>z.room_id===r.id).sort((a,b)=>(a.sort_order-b.sort_order));
 const placementAt = code => placements.find(p=>p.slot_code===code && !p.removed_date);
 const slotCode = (bay,letter,n)=> `B${bay.bay_no}-${letter}-${n}`;
 // Matching on slot_code + batch_id alone isn't enough to identify THIS
@@ -2217,8 +2241,8 @@ function roomStats(){
 function renderRoom(){
   document.getElementById("view-room").className="view"+(document.getElementById("view-room").classList.contains("active")?" active":"");
   const wrap=$("roomWrap");
-  if(!zones.length){
-    wrap.innerHTML=`<div class="empty">No rooms set up yet.<br><br><button class="btn btn-primary" onclick="seedRoom()">Build a starter room automatically</button> &nbsp; or <button class="btn" onclick="openRoomSetup()">set up manually</button><br><br><span style="font-size:13px">The auto-build creates one room with 2 walls (3 bays × 9 rows × 6) and a centre island (5 rows × 24) - a starting point, not the only room you can have. Add more rooms any time in Room setup, and everything's editable after.</span></div>`;
+  if(!rooms.length){
+    wrap.innerHTML=`<div class="empty">No rooms set up yet.<br><br><button class="btn btn-primary" onclick="seedRoom()">Build a starter room automatically</button> &nbsp; or <button class="btn" onclick="openRoomSetup()">set up manually</button><br><br><span style="font-size:13px">The auto-build creates one room ("FC1") with 2 walls (3 bays × 9 rows × 6) and a centre island (5 rows × 24) - a starting point, not the only room you can have. Add more rooms any time in Room setup, each with its own walls/bays/shelves, and everything's editable after.</span></div>`;
     $("roomStats").innerHTML=""; $("placeBanner").innerHTML=""; return;
   }
   secondFlushGapData=computeSecondFlushGaps();
@@ -2289,9 +2313,20 @@ function renderRoom(){
   // species legend (only species currently placed)
   const placedSpecies=[...new Set(placements.filter(p=>!p.removed_date).map(p=>batches.find(b=>b.id===p.batch_id)?.species).filter(Boolean))];
   const legend = placedSpecies.length ? `<div class="room-legend">${placedSpecies.map(sp=>`<span><i style="background:${speciesColor(sp)}"></i>${esc(sp)}</span>`).join("")}</div>` : "";
-  // zones
-  wrap.innerHTML = legend + zones.slice().sort((a,b)=>a.sort_order-b.sort_order).map(zoneHTML).join("");
+  // rooms (each with its own zones/walls/bays nested inside - 2026-09-04,
+  // see roomHTML/zonesOf. A zone with no room_id yet - shouldn't happen
+  // once the migration's run, mn_zones.room_id is NOT NULL from then on -
+  // just wouldn't render anywhere rather than crashing.)
+  wrap.innerHTML = legend + rooms.slice().sort((a,b)=>a.sort_order-b.sort_order).map(roomHTML).join("");
   updateRemoveBar();
+}
+
+function roomHTML(room){
+  const rz=zonesOf(room);
+  return `<div class="room-block">
+    <div class="room-block-head"><h1>${esc(room.name)}</h1></div>
+    ${rz.map(zoneHTML).join("") || `<div class="empty">No zones in this room yet — add some in Room setup.</div>`}
+  </div>`;
 }
 
 function zoneHTML(z){
@@ -2808,19 +2843,22 @@ async function rearrangeDrop(e,targetCode){
 }
 
 /* ===== Room setup ===== */
-/* User-facing copy says "room" (2026-09-04, Adam's ask: multiple named
-   grow rooms - FC1/FC2, Shiitake Chamber/Oyster Room) - internal names
-   (mn_zones table, zoneHTML, addZone/saveZone/deleteZone, .zone CSS
-   classes) deliberately still say "zone" throughout, left untouched.
-   This was already fully supported by the existing data model (a "zone"
-   is just a freely-named group of bays, no code change needed there) -
-   the only real gap was that every user-facing string framed it as "one
-   room split into zones" (walls/centre island) rather than "however
-   many independent rooms you want", which didn't match how Adam
-   actually thinks about the farm. Renaming the internal identifiers
-   too would be needless churn for a copy-only fix - see this session's
-   MMAVIS rebrand for the same reasoning (rename what's shown, not
-   what's plumbing). */
+/* Three real levels now (2026-09-04, Adam's ask): Room (FC1, FC2,
+   Shiitake Chamber...) > Zone (a wall/section/shelf unit inside that
+   room - Wall 1, Wall 2, Centre island) > Bay > slots. First pass at
+   this (same day, reverted) just relabeled the existing Zone level to
+   "Room" - wrong, since that flattened Wall 1/Wall 2/Centre island into
+   3 separate top-level "rooms" instead of 3 sections of ONE room, which
+   isn't what Adam meant ("I kinda wanted to leave EVERYTHING where it
+   is in FC1"). This is a genuine new mn_rooms table (see the migration
+   SQL handed to Adam - can't run DDL from here, only DML) with
+   mn_zones.room_id linking every existing zone to one "FC1" room, so
+   nothing about the current bays/placements moves - addRoom/saveRoom/
+   deleteRoom are real CRUD now, not just relabeled zone functions.
+   Zone-level naming (mn_zones, zoneHTML, addZone/saveZone/deleteZone,
+   .zone CSS) stays "zone" throughout, both internally and in the UI -
+   it's the correct, distinct middle level now, not a stand-in for
+   "room" anymore. */
 function openRoomSetup(){
   roomSetupEditing=false;
   renderSetup();
@@ -2831,62 +2869,94 @@ function finishRoomEdit(){ roomSetupEditing=false; renderSetup(); }
 function renderSetup(){
   const wrap=$("setupWrap");
   const actions=$("setupActions");
-  if(!zones.length){
+  if(!rooms.length){
     wrap.innerHTML=`<div class="empty">No rooms yet. Add one below, or <button class="btn btn-sm" onclick="seedRoom()">auto-build a starter room</button>.</div>`;
-    if(actions) actions.innerHTML=`<button class="btn btn-primary" onclick="addZone()">＋ Add room</button>`;
+    if(actions) actions.innerHTML=`<button class="btn btn-primary" onclick="addRoom()">＋ Add room</button>`;
     return;
   }
+  const sortedRooms=rooms.slice().sort((a,b)=>a.sort_order-b.sort_order);
   if(!roomSetupEditing){
     // read-only summary — just browsing this view never creates anything
-    wrap.innerHTML = zones.slice().sort((a,b)=>a.sort_order-b.sort_order).map(z=>{
-      const zb=baysOf(z);
-      return `<div class="setup-zone">
-        <div class="zrow" style="align-items:center;margin-bottom:0">
-          <div><b>${esc(z.name)}</b>${z.block_kg?` <span style="color:var(--muted);font-size:13px">· ${z.block_kg}kg blocks</span>`:""}</div>
-          <div style="color:var(--muted);font-size:13px">${zb.length?zb.map(bay=>`Bay ${bay.bay_no} (${bay.rows}×${bay.slots_per_row})`).join(", "):"No bays yet"}</div>
-        </div>
+    wrap.innerHTML = sortedRooms.map(room=>{
+      const rz=zonesOf(room);
+      return `<div class="setup-room">
+        <div class="setup-room-head"><b>${esc(room.name)}</b></div>
+        ${rz.length?rz.map(z=>{
+          const zb=baysOf(z);
+          return `<div class="setup-zone">
+            <div class="zrow" style="align-items:center;margin-bottom:0">
+              <div>${esc(z.name)}${z.block_kg?` <span style="color:var(--muted);font-size:13px">· ${z.block_kg}kg blocks</span>`:""}</div>
+              <div style="color:var(--muted);font-size:13px">${zb.length?zb.map(bay=>`Bay ${bay.bay_no} (${bay.rows}×${bay.slots_per_row})`).join(", "):"No bays yet"}</div>
+            </div>
+          </div>`;
+        }).join(""):`<div class="empty" style="margin:0">No zones in this room yet</div>`}
       </div>`;
     }).join("");
-    if(actions) actions.innerHTML=`<button class="btn btn-primary" onclick="startRoomEdit()">✎ Edit room</button>`;
+    if(actions) actions.innerHTML=`<button class="btn btn-primary" onclick="startRoomEdit()">✎ Edit rooms</button>`;
     return;
   }
-  // editing mode — full zone/bay editor
-  wrap.innerHTML = zones.slice().sort((a,b)=>a.sort_order-b.sort_order).map(z=>{
-    const zb=baysOf(z);
-    return `<div class="setup-zone">
-      <div class="zrow">
-        <div><label>Room name</label><input id="z_name_${z.id}" value="${esc(z.name)}"></div>
-        <div><label>Block weight (kg)</label><input type="number" step="0.1" id="z_kg_${z.id}" value="${z.block_kg??""}" placeholder="e.g. 4.5"></div>
-        <button class="btn btn-sm" onclick="saveZone('${z.id}')">Save</button>
-        <button class="btn btn-sm btn-danger" onclick="deleteZone('${z.id}')">Delete room</button>
+  // editing mode — full room/zone/bay editor
+  wrap.innerHTML = sortedRooms.map(room=>{
+    const rz=zonesOf(room);
+    return `<div class="setup-room">
+      <div class="setup-room-head zrow">
+        <div><label>Room name</label><input id="r_name_${room.id}" value="${esc(room.name)}"></div>
+        <button class="btn btn-sm" onclick="saveRoom('${room.id}')">Save</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteRoom('${room.id}')">Delete room</button>
       </div>
-      ${zb.map(bay=>`
-        <div class="setup-bay">
-          <div style="flex:0 0 auto;min-width:auto"><label>Bay #</label><input type="number" id="b_no_${bay.id}" value="${bay.bay_no}" style="width:60px"></div>
-          <div><label>Rows (A–)</label><input type="number" id="b_rows_${bay.id}" value="${bay.rows}"></div>
-          <div><label>Slots / row</label><input type="number" id="b_slots_${bay.id}" value="${bay.slots_per_row}"></div>
-          <div><label>Wrap at (opt.)</label><input type="number" id="b_line_${bay.id}" value="${bay.slots_per_line??""}" placeholder="—"></div>
-          <button class="btn btn-sm" onclick="saveBay('${bay.id}')">Save</button>
-          <button class="btn btn-sm btn-danger" onclick="deleteBay('${bay.id}')">✕</button>
-        </div>`).join("")}
-      <button class="btn btn-sm" style="margin-top:6px" onclick="addBay('${z.id}')">＋ Add bay to ${esc(z.name)}</button>
+      ${rz.map(z=>{
+        const zb=baysOf(z);
+        return `<div class="setup-zone">
+          <div class="zrow">
+            <div><label>Zone name</label><input id="z_name_${z.id}" value="${esc(z.name)}"></div>
+            <div><label>Block weight (kg)</label><input type="number" step="0.1" id="z_kg_${z.id}" value="${z.block_kg??""}" placeholder="e.g. 4.5"></div>
+            <button class="btn btn-sm" onclick="saveZone('${z.id}')">Save</button>
+            <button class="btn btn-sm btn-danger" onclick="deleteZone('${z.id}')">Delete zone</button>
+          </div>
+          ${zb.map(bay=>`
+            <div class="setup-bay">
+              <div style="flex:0 0 auto;min-width:auto"><label>Bay #</label><input type="number" id="b_no_${bay.id}" value="${bay.bay_no}" style="width:60px"></div>
+              <div><label>Rows (A–)</label><input type="number" id="b_rows_${bay.id}" value="${bay.rows}"></div>
+              <div><label>Slots / row</label><input type="number" id="b_slots_${bay.id}" value="${bay.slots_per_row}"></div>
+              <div><label>Wrap at (opt.)</label><input type="number" id="b_line_${bay.id}" value="${bay.slots_per_line??""}" placeholder="—"></div>
+              <button class="btn btn-sm" onclick="saveBay('${bay.id}')">Save</button>
+              <button class="btn btn-sm btn-danger" onclick="deleteBay('${bay.id}')">✕</button>
+            </div>`).join("")}
+          <button class="btn btn-sm" style="margin-top:6px" onclick="addBay('${z.id}')">＋ Add bay to ${esc(z.name)}</button>
+        </div>`;
+      }).join("")}
+      <button class="btn btn-sm" style="margin-top:6px" onclick="addZone('${room.id}')">＋ Add zone/wall to ${esc(room.name)}</button>
     </div>`;
   }).join("");
-  if(actions) actions.innerHTML=`<button class="btn btn-primary" onclick="addZone()">＋ Add room</button> <button class="btn btn-sm" onclick="finishRoomEdit()">Done editing</button>`;
+  if(actions) actions.innerHTML=`<button class="btn btn-primary" onclick="addRoom()">＋ Add room</button> <button class="btn btn-sm" onclick="finishRoomEdit()">Done editing</button>`;
 }
-async function addZone(){
-  const n=zones.length;
+async function addRoom(){
+  const n=rooms.length;
   roomSetupEditing=true;
-  await write(db.from("mn_zones").insert({name:"New room",sort_order:n}),"Couldn't add room");
+  await write(db.from("mn_rooms").insert({name:"New room",sort_order:n}),"Couldn't add room");
+  renderSetup();
+}
+async function saveRoom(id){
+  await write(db.from("mn_rooms").update({name:$("r_name_"+id).value.trim()||"Room"}).eq("id",id),"Couldn't save room");
+  renderSetup();
+}
+async function deleteRoom(id){
+  if(!confirm("Delete this room and everything in it - all its zones and bays? Any placements in them will be cleared.")) return;
+  await write(db.from("mn_rooms").delete().eq("id",id),"Couldn't delete room");
+  renderSetup();
+}
+async function addZone(roomId){
+  const n=zonesOf(rooms.find(r=>r.id===roomId)).length;
+  await write(db.from("mn_zones").insert({room_id:roomId,name:"New zone",sort_order:n}),"Couldn't add zone");
   renderSetup();
 }
 async function saveZone(id){
-  await write(db.from("mn_zones").update({name:$("z_name_"+id).value.trim()||"Room",block_kg:parseFloat($("z_kg_"+id).value)||null}).eq("id",id),"Couldn't save room");
+  await write(db.from("mn_zones").update({name:$("z_name_"+id).value.trim()||"Zone",block_kg:parseFloat($("z_kg_"+id).value)||null}).eq("id",id),"Couldn't save zone");
   renderSetup();
 }
 async function deleteZone(id){
-  if(!confirm("Delete this room and all its bays? Any placements in it will be cleared.")) return;
-  await write(db.from("mn_zones").delete().eq("id",id),"Couldn't delete room");
+  if(!confirm("Delete this zone and all its bays? Any placements in it will be cleared.")) return;
+  await write(db.from("mn_zones").delete().eq("id",id),"Couldn't delete zone");
   renderSetup();
 }
 async function addBay(zoneId){
@@ -2911,18 +2981,25 @@ async function deleteBay(id){
   renderSetup();
 }
 async function seedRoom(){
-  if(zones.length && !confirm("This adds a starter layout (2 walls + centre island) on top of what's there. Continue?")) return;
+  if(rooms.length && !confirm("This adds a new starter room (\"FC1\") alongside what's already there. Continue?")) return;
   setSync("","Building room…");
   try{
-    const mk = async (name,kg,order)=>{ const {data}=await db.from("mn_zones").insert({name,block_kg:kg,sort_order:order}).select().single(); return data; };
+    const roomName = rooms.length ? `FC${rooms.length+1}` : "FC1";
+    const {data:room} = await db.from("mn_rooms").insert({name:roomName,sort_order:rooms.length}).select().single();
+    const mk = async (name,kg,order)=>{ const {data}=await db.from("mn_zones").insert({room_id:room.id,name,block_kg:kg,sort_order:order}).select().single(); return data; };
     const w1=await mk("Wall 1",4.5,0), w2=await mk("Wall 2",4.5,1), c=await mk("Centre island",2.5,2);
+    // bay_no is unique across the WHOLE account, not just this room (see
+    // addBay's own maxNo computation) - offsetting from the current global
+    // max instead of hardcoding 1-7 is what makes it safe to auto-build a
+    // second/third starter room later without colliding with FC1's bays.
+    const baseBay=bays.reduce((m,b)=>Math.max(m,b.bay_no),0);
     const baysToAdd=[];
-    [w1,w2].forEach((z,zi)=>{ for(let i=0;i<3;i++) baysToAdd.push({zone_id:z.id,bay_no:zi*3+i+1,rows:9,slots_per_row:6,sort_order:i}); });
-    baysToAdd.push({zone_id:c.id,bay_no:7,rows:5,slots_per_row:24,slots_per_line:12,sort_order:0});
+    [w1,w2].forEach((z,zi)=>{ for(let i=0;i<3;i++) baysToAdd.push({zone_id:z.id,bay_no:baseBay+zi*3+i+1,rows:9,slots_per_row:6,sort_order:i}); });
+    baysToAdd.push({zone_id:c.id,bay_no:baseBay+7,rows:5,slots_per_row:24,slots_per_line:12,sort_order:0});
     await db.from("mn_bays").insert(baysToAdd);
     await loadAll(); renderSetup(); renderRoom();
     setSync("ok","Synced");
-  }catch(e){ console.error(e); setSync("bad","Build failed"); alert("Couldn't build the room. Make sure you've run setup_room.sql first.\n\n"+e.message); }
+  }catch(e){ console.error(e); setSync("bad","Build failed"); alert("Couldn't build the room. Make sure you've run the Room migration SQL first.\n\n"+e.message); }
 }
 
 
