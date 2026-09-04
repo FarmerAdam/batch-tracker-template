@@ -132,6 +132,59 @@
   --surface-2:#101810; --ink-dim:#7C9186;
   --rust:#4FD68C; --rust-dim:#2E9E68; --rust-rgb:79,214,140;
 }
+/* Palettes 4-6 (2026-09-04, template gift) - clean/cool, loud, and
+   dark-luxe, to give a real spread beyond the first three's shared
+   "moody duotone" register. Same full-identity structure as
+   markwood/foxfire above - every token redefined, --accent seeded
+   separately in PALETTES below. */
+[data-palette="mycelium"]{
+  --bg:#EEF1F4; --card:#FFFFFF; --ink:#232A33; --muted:#7C8894; --line:#DCE2E8;
+  --accent-ink:#FFFFFF; --danger:#C6414F; --danger-rgb:198,65,79;
+  --st-incubating:#5C6B78; --st-ready:#BFD9F2; --st-fruiting:#3E9B6E; --st-complete:#3457A6;
+  --st-contaminated:#C6414F; --st-failed:#D89A3E; --st-culled:#4B4F58; --st-packed:#7C63B8;
+  --slot-empty-bg:#F7F9FB; --slot-empty-ink:#C2CBD3; --slot-place-bg:#E7EEF5;
+  --surface-2:#E1E7ED; --ink-dim:#5B6570;
+  --rust:#4A5FD1; --rust-dim:#2E3E96; --rust-rgb:74,95,209;
+}
+[data-palette="mycelium"][data-theme="dark"]{
+  --bg:#10141A; --card:#171C24; --ink:#E4E9EF; --muted:#8B96A3; --line:#2A313B;
+  --danger:#E0808C; --danger-rgb:224,128,140;
+  --slot-empty-bg:#12161C; --slot-empty-ink:#3E4753; --slot-place-bg:#1B222C;
+  --surface-2:#161C24; --ink-dim:#8B96A3;
+  --rust:#7C90F0; --rust-dim:#4A5FD1;
+}
+[data-palette="amanita"]{
+  --bg:#FBEFE3; --card:#FFFFFF; --ink:#2B1610; --muted:#8A6A5C; --line:#F0DCC8;
+  --accent-ink:#FFFFFF; --danger:#8A1A1A; --danger-rgb:138,26,26;
+  --st-incubating:#8A7566; --st-ready:#F2C879; --st-fruiting:#4E8F4A; --st-complete:#2E6E8E;
+  --st-contaminated:#8A1A1A; --st-failed:#D98A2B; --st-culled:#4A3A30; --st-packed:#A85A8A;
+  --slot-empty-bg:#FDF6EC; --slot-empty-ink:#E3C7A8; --slot-place-bg:#F7E6D4;
+  --surface-2:#F2DCC0; --ink-dim:#6E5344;
+  --rust:#D0332A; --rust-dim:#8F1F19; --rust-rgb:208,51,42;
+}
+[data-palette="amanita"][data-theme="dark"]{
+  --bg:#1A100C; --card:#241713; --ink:#F5E4D4; --muted:#B08E76; --line:#3A251C;
+  --danger:#E88A7A; --danger-rgb:232,138,122;
+  --slot-empty-bg:#1E120D; --slot-empty-ink:#5C4030; --slot-place-bg:#2A1B14;
+  --surface-2:#26170F; --ink-dim:#B08E76;
+  --rust:#F04A3B; --rust-dim:#B02E22;
+}
+[data-palette="truffle"]{
+  --bg:#EAE3D6; --card:#FFFFFF; --ink:#24211C; --muted:#7D7566; --line:#DDD4C0;
+  --accent-ink:#F2E6C8; --danger:#96382A; --danger-rgb:150,56,42;
+  --st-incubating:#6B6355; --st-ready:#D9C48A; --st-fruiting:#4C7A4A; --st-complete:#3A5C78;
+  --st-contaminated:#96382A; --st-failed:#B8802E; --st-culled:#3A352C; --st-packed:#7A5C82;
+  --slot-empty-bg:#F3EEE2; --slot-empty-ink:#D3C7AE; --slot-place-bg:#E6DCC6;
+  --surface-2:#DED2B8; --ink-dim:#5E5748;
+  --rust:#9C7A34; --rust-dim:#6B5220; --rust-rgb:156,122,52;
+}
+[data-palette="truffle"][data-theme="dark"]{
+  --bg:#14110C; --card:#1D1811; --ink:#EDE4D2; --muted:#A0937A; --line:#332B1E;
+  --danger:#D98A76; --danger-rgb:217,138,118;
+  --slot-empty-bg:#17130D; --slot-empty-ink:#4A4030; --slot-place-bg:#211B13;
+  --surface-2:#1B160F; --ink-dim:#A0937A;
+  --rust:#D9AA4A; --rust-dim:#9C7A34;
+}
 [data-theme="dark"] input,[data-theme="dark"] select,[data-theme="dark"] textarea{background:#1F1D1A;border-color:#3A352F}
 [data-theme="dark"] .note-banner{background:#2B2820;border-color:#423D2C;color:#C9BE9C}
 [data-theme="dark"] .label,[data-theme="dark"] .qr-card{background:#fff}
@@ -974,7 +1027,10 @@ const ACCENTS=[
 const PALETTES={
   retro:{name:"Retro 80s", accent:"#3E5C42", strip:["#1A1A1A","#F04E23","#B8E8E8","#5FBF8F"]},
   markwood:{name:"Heritage", accent:"#4A2017", strip:["#1F1710","#A8331D","#D4B36A","#6B7A4F"]},
-  foxfire:{name:"Foxfire", accent:"#6B4FA0", strip:["#0B120E","#9B6FD9","#4FD68C","#3FCDB0"]}
+  foxfire:{name:"Foxfire", accent:"#6B4FA0", strip:["#0B120E","#9B6FD9","#4FD68C","#3FCDB0"]},
+  mycelium:{name:"Mycelium", accent:"#4A5FD1", strip:["#10141A","#7C90F0","#BFD9F2","#3E9B6E"]},
+  amanita:{name:"Amanita", accent:"#2E6E4A", strip:["#1A100C","#F04A3B","#F2C879","#4E8F4A"]},
+  truffle:{name:"Truffle", accent:"#6B2E3A", strip:["#14110C","#D9AA4A","#D9C48A","#4C7A4A"]}
 };
 let prefs={user:"", theme:"light", accent:"#3E5C42", palette:"retro"};
 let branding={farmName:"Batch Tracker", logo:null};
