@@ -1287,6 +1287,127 @@ function batchCounts(b){
   return c;
 }
 function yieldFor(species){ return yieldDefaults.find(y=>y.species===species) || null; }
+
+/* ================= WEEKLY YIELD FORECAST =================
+   Combined already-harvested + still-projected kg for the calendar week
+   (Monday-Sunday) containing the given date. Real logged harvests dated
+   this week are summed directly from mn_harvests; still-standing
+   placements get an *expected* harvest date (placement date + this
+   species' days-to-first-flush, or last-harvest date + the empirical
+   second-flush gap for a placement that's already had exactly one
+   flush) and count if that expected date falls in the same week. A
+   placement with 2+ flushes already logged isn't projected further -
+   no third-flush model, same "don't guess" rule the rest of this file
+   already follows. kg-per-block prefers a real empirical average (once
+   there are SECOND_FLUSH_MIN_SAMPLES real weighed harvests for that
+   species+flush) over the curated yield_kg_per_block range, and skips
+   a species entirely rather than guessing if neither is available yet.
+   Ported from the same computation MAVIS/Farm Panel already use
+   (nodes/mavis/capabilities/batch_tracker.py:compute_weekly_yield_forecast)
+   so this reads the same for every grower's own instance - no MAVIS or
+   Farm Panel required, everything it needs is already loaded above. */
+const addDaysISO = (iso,n) => { const d=new Date(iso); d.setDate(d.getDate()+n); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
+function weekBounds(iso){
+  const dow=(new Date(iso).getDay()+6)%7; // Mon=0..Sun=6
+  const monday=addDaysISO(iso,-dow);
+  return {monday, sunday:addDaysISO(monday,6)};
+}
+function computeSpeciesGrowthDays(){
+  const speciesByBatch={}; for(const b of batches) speciesByBatch[b.id]=b.species;
+  const harvestsByKey={};
+  for(const h of harvests) (harvestsByKey[h.batch_id+"|"+h.slot_code]=harvestsByKey[h.batch_id+"|"+h.slot_code]||[]).push(h);
+  const samples={};
+  for(const p of placements){
+    const species=speciesByBatch[p.batch_id]; if(!species) continue;
+    const candidates=harvestsByKey[p.batch_id+"|"+p.slot_code]||[]; if(!candidates.length) continue;
+    const matching=candidates.map(h=>h.harvest_date).filter(hd=> hd>=p.placed_date && (!p.removed_date || hd<=p.removed_date));
+    if(!matching.length) continue;
+    const days=daysBetween(p.placed_date, matching.slice().sort()[0]);
+    if(days<0) continue;
+    (samples[species]=samples[species]||[]).push(days);
+  }
+  const avg={};
+  for(const sp in samples) avg[sp]=Math.round(samples[sp].reduce((s,d)=>s+d,0)/samples[sp].length);
+  return avg;
+}
+function computeSpeciesFlushYieldKg(){
+  const speciesByBatch={}; for(const b of batches) speciesByBatch[b.id]=b.species;
+  const samples={};
+  for(const h of harvests){
+    const species=speciesByBatch[h.batch_id];
+    if(!species || (h.flush!==1 && h.flush!==2) || h.weight_g==null) continue;
+    const key=species+"|"+h.flush;
+    (samples[key]=samples[key]||[]).push(h.weight_g/1000);
+  }
+  const avg={}, counts={};
+  for(const key in samples){ counts[key]=samples[key].length; avg[key]=samples[key].reduce((s,v)=>s+v,0)/samples[key].length; }
+  return {avg,counts};
+}
+function yieldKgPerBlock(species, flushNum, flushAvg, flushCounts){
+  const key=species+"|"+flushNum;
+  if((flushCounts[key]||0)>=SECOND_FLUSH_MIN_SAMPLES) return flushAvg[key];
+  const yd=yieldFor(species);
+  if(yd && yd.yield_kg_per_block_low!=null && yd.yield_kg_per_block_high!=null) return (yd.yield_kg_per_block_low+yd.yield_kg_per_block_high)/2;
+  return null; // no empirical samples and no curated default - don't guess
+}
+function computeWeeklyYieldForecast(today){
+  today = today || todayISO();
+  const {monday, sunday} = weekBounds(today);
+  const speciesByBatch={}; for(const b of batches) speciesByBatch[b.id]=b.species;
+  const harvestsByKey={};
+  for(const h of harvests) (harvestsByKey[h.batch_id+"|"+h.slot_code]=harvestsByKey[h.batch_id+"|"+h.slot_code]||[]).push(h);
+
+  const thresholdBySpecies={};
+  for(const yd of yieldDefaults) if(yd.days_to_harvest_low!=null) thresholdBySpecies[yd.species]=yd.days_to_harvest_low;
+  const empiricalGrowth=computeSpeciesGrowthDays();
+  for(const sp in empiricalGrowth) if(!(sp in thresholdBySpecies)) thresholdBySpecies[sp]=empiricalGrowth[sp];
+
+  const {avg:secondFlushAvg, counts:secondFlushCounts} = computeSecondFlushGaps();
+  const secondFlushThresholdBySpecies={};
+  for(const sp in secondFlushAvg) if((secondFlushCounts[sp]||0)>=SECOND_FLUSH_MIN_SAMPLES) secondFlushThresholdBySpecies[sp]=secondFlushAvg[sp];
+
+  const {avg:flushYieldAvg, counts:flushYieldCounts} = computeSpeciesFlushYieldKg();
+
+  let harvestedKg=0; const harvestedBySpeciesKg={};
+  for(const h of harvests){
+    if(h.weight_g==null || h.harvest_date<monday || h.harvest_date>sunday) continue;
+    const species=speciesByBatch[h.batch_id]; if(!species) continue;
+    const kg=h.weight_g/1000;
+    harvestedKg+=kg;
+    harvestedBySpeciesKg[species]=(harvestedBySpeciesKg[species]||0)+kg;
+  }
+
+  let projectedKg=0; const projectedBySpeciesKg={};
+  for(const p of placements.filter(p=>!p.removed_date)){
+    const species=speciesByBatch[p.batch_id]; if(!species) continue;
+    const hs=(harvestsByKey[p.batch_id+"|"+p.slot_code]||[]).slice().sort((a,b)=>a.harvest_date<b.harvest_date?-1:1);
+    let expectedDate, flushNum;
+    if(hs.length===0){
+      const threshold=thresholdBySpecies[species]; if(threshold==null) continue;
+      expectedDate=addDaysISO(p.placed_date, threshold); flushNum=1;
+    } else if(hs.length===1){
+      const threshold=secondFlushThresholdBySpecies[species]; if(threshold==null) continue;
+      expectedDate=addDaysISO(hs[0].harvest_date, threshold); flushNum=2;
+    } else continue; // 2+ flushes already logged - no third-flush model
+    if(expectedDate<monday || expectedDate>sunday) continue;
+    const kg=yieldKgPerBlock(species, flushNum, flushYieldAvg, flushYieldCounts);
+    if(kg==null) continue;
+    projectedKg+=kg;
+    projectedBySpeciesKg[species]=(projectedBySpeciesKg[species]||0)+kg;
+  }
+
+  const totalBySpeciesKg={...harvestedBySpeciesKg};
+  for(const sp in projectedBySpeciesKg) totalBySpeciesKg[sp]=(totalBySpeciesKg[sp]||0)+projectedBySpeciesKg[sp];
+  const r1=n=>Math.round(n*10)/10;
+  const roundMap=m=>{const o={}; for(const k in m) o[k]=r1(m[k]); return o;};
+  return {
+    harvestedKg:r1(harvestedKg), harvestedBySpeciesKg:roundMap(harvestedBySpeciesKg),
+    projectedKg:r1(projectedKg), projectedBySpeciesKg:roundMap(projectedBySpeciesKg),
+    totalKg:r1(harvestedKg+projectedKg), totalBySpeciesKg:roundMap(totalBySpeciesKg),
+    weekStart:monday, weekEnd:sunday,
+  };
+}
+
 async function applyHarvestSuggestion(species, lo, hi){
   if(!confirm(`Update your "days to harvest" default for ${species} to ${lo}\u2013${hi} days, based on your real harvest data?`)) return;
   const {error} = await db.from("mn_yield_defaults").update({days_to_harvest_low:lo, days_to_harvest_high:hi, updated_at:new Date().toISOString()}).eq("species",species);
@@ -3290,6 +3411,31 @@ function toggleAnalyticsBreakdown(){
   renderAnalytics();
 }
 
+function weeklyForecastHTML(){
+  const f=computeWeeklyYieldForecast();
+  const fmtKg=n=>n>0?n.toFixed(1)+" kg":"0 kg";
+  const fmtRange=(a,b)=>{
+    const da=new Date(a), db=new Date(b);
+    const opts=(m)=>({month:m,day:"numeric"});
+    return `${da.toLocaleDateString(undefined,opts("short"))} – ${db.toLocaleDateString(undefined,opts("short"))}`;
+  };
+  const bySpecies=Object.keys(f.totalBySpeciesKg).sort((a,b)=>f.totalBySpeciesKg[b]-f.totalBySpeciesKg[a]);
+  const breakdown = bySpecies.length ? `<div class="tablewrap" style="margin-top:10px"><table>
+    <tr><th>Species</th><th>Harvested</th><th>Projected</th><th>Total</th></tr>
+    ${bySpecies.map(sp=>`<tr><td>${esc(sp)}</td><td>${fmtKg(f.harvestedBySpeciesKg[sp]||0)}</td><td>${fmtKg(f.projectedBySpeciesKg[sp]||0)}</td><td><b>${fmtKg(f.totalBySpeciesKg[sp])}</b></td></tr>`).join("")}
+  </table></div>` : "";
+  return `<div class="tablewrap" style="margin-bottom:20px;padding:16px 18px">
+    <h3 style="margin-bottom:10px">This week's harvest — ${fmtRange(f.weekStart,f.weekEnd)}</h3>
+    <div class="statline">
+      <div class="stat"><div class="n">${fmtKg(f.harvestedKg)}</div><div class="l">Harvested so far</div></div>
+      <div class="stat"><div class="n">${fmtKg(f.projectedKg)}</div><div class="l">Projected, still to come</div></div>
+      <div class="stat"><div class="n">${fmtKg(f.totalKg)}</div><div class="l">Total for the week</div></div>
+    </div>
+    ${breakdown}
+    ${infoBannerHTML("analyticsWeeklyForecast", `Harvested is real weight already logged this week. Projected estimates what's still to come: each block still standing gets an expected harvest date (placement date + this species' days-to-first-flush, or last harvest + the learned second-flush gap), counted here if that date falls in this week - using either your curated yield defaults or your own real harvest history once there's enough of it, never a guess for a species with neither. Nothing beyond a second flush is projected.`, "margin-top:10px")}
+  </div>`;
+}
+
 function renderAnalytics(){
   const seg=$("analyticsViewSeg");
   if(seg) for(const btn of seg.querySelectorAll("button")) btn.classList.toggle("active", btn.dataset.view===analyticsView);
@@ -3377,7 +3523,7 @@ function renderAnalytics(){
   // counts, yield and $ columns stay visible always, this secondary
   // per-batch diagnostic detail only renders when explicitly opened up.
   const bd=analyticsShowBreakdown;
-  $("analyticsWrap").innerHTML=`<div class="tablewrap"><table>
+  $("analyticsWrap").innerHTML=weeklyForecastHTML()+`<div class="tablewrap"><table>
     <tr><th></th><th>Species</th><th>Batches</th><th>Blocks inoc</th><th>→ Fruiting</th><th>Contam</th><th>No colonise</th><th>Packed${infoDot("Blocks marked 'Packed / Ready for Sale' - grow kits sold whole, not harvested here. Kept separate from Total yield/Cost per kg below, which are computed from real logged harvest weight.")}</th><th>Total yield</th>
         ${bd?`<th>Avg days → fruit</th><th>Fruiting → harvest (actual)${infoDot("Real observed time from first move-to-fruiting to first harvest logged — learns as you log more harvests")}</th><th>Avg days → ready${infoDot("Manually logged 'ready to fruit' date, independent of when blocks are physically moved to the fruiting chamber")}</th><th>Avg days → done</th><th>Dry substrate${infoDot("Dry substrate weight — water backed out of the finished block weight")}</th><th>g / fruited block${infoDot(completed?"Yield ÷ blocks that reached fruiting and have since finished their cycle":"Yield ÷ every block ever moved to fruiting, including ones still fruiting now")}</th><th>Yield/kg sub</th><th>Efficiency${infoDot("Biological efficiency — fresh yield ÷ dry substrate weight")}</th>`:""}
         <th>Cost / kg</th><th>Wholesale $/kg</th><th>Wholesale margin</th><th>Retail $/kg</th><th>Retail margin</th><th>Packed Revenue${infoDot(`Packed blocks × the flat $${PACKED_PRICE_PER_BLOCK}/block rate set in Costs - not a per-kg figure like the columns to its left, and not counted in Cost/kg or margin above.`)}</th></tr>
