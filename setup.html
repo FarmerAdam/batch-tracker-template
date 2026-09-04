@@ -133,13 +133,25 @@ footer.page{text-align:center;color:var(--muted);font-size:12px;margin-top:20px}
 
   <section class="step" id="step5">
     <h2><span class="num">5</span> Deploy</h2>
-    <p class="sub">Put your copy on the internet, on your own free GitHub account.</p>
+    <p class="sub">Put your copy on the internet, on your own free GitHub account. If you're reading this on a page someone else shared with you (not one you've deployed yourself yet), that's normal - this step is where you get your own copy.</p>
+    <p style="font-weight:600;margin:14px 0 6px">Which did you download in Step 4?</p>
+    <p class="hint" style="margin-bottom:2px"><strong>A) The full package (.zip)</strong> - fastest, one upload:</p>
+    <ol class="plain">
+      <li>Unzip the file you downloaded.</li>
+      <li>On GitHub: <a href="https://github.com/new" target="_blank" rel="noopener">create a brand new, empty repository</a> - any name, public is simplest. You don't need "Use this template" for this path - the zip already has everything, including your own <code>config.js</code>.</li>
+      <li>On that new repo's page: <strong>Add file → Upload files</strong> → drag in <em>everything</em> from the unzipped folder, including files starting with a dot (like <code>.nojekyll</code> and <code>.gitignore</code> - your file browser may hide these by default, check its "show hidden files" setting) → Commit.</li>
+      <li>In that repo: <strong>Settings → Pages</strong> → Source = "Deploy from a branch", Branch = <code>main</code> / <code>(root)</code> → Save. Takes 1-2 minutes.</li>
+    </ol>
+    <p class="hint" style="margin-bottom:2px"><strong>B) Just config.js</strong> - two steps, if you'd rather use "Use this template":</p>
     <ol class="plain">
       <li>On the Batch Tracker repo page: click <strong>"Use this template"</strong> if you see it (cleanest - a fresh independent copy), otherwise <strong>"Fork"</strong>.</li>
-      <li>In your new repo: <strong>Settings → Pages</strong> → Source = "Deploy from a branch", Branch = <code>main</code> / <code>(root)</code> → Save. Takes 1-2 minutes. (If you got here by opening this exact page at a <code>github.io</code> address already, Pages is already on - skip this.)</li>
-      <li>Add the <code>config.js</code> you downloaded in Step 4 to your repo, next to <code>index.html</code> - easiest via <strong>Add file → Upload files</strong> on your repo's GitHub page (no local tools needed), then commit. Wait ~1 minute for the site to rebuild.</li>
+      <li>In your new repo: <strong>Settings → Pages</strong> → Source = "Deploy from a branch", Branch = <code>main</code> / <code>(root)</code> → Save. Takes 1-2 minutes. (If you're reading this page at your own <code>github.io</code> address already, Pages is already on - skip this.)</li>
+      <li>Add the <code>config.js</code> you downloaded to your repo, next to <code>index.html</code> - easiest via <strong>Add file → Upload files</strong> on your repo's GitHub page, then commit. Wait ~1 minute for the site to rebuild.</li>
+    </ol>
+    <p style="font-weight:600;margin:14px 0 6px">Then, either way:</p>
+    <ol class="plain">
       <li>Create your first login: in Supabase, <strong>Authentication → Users → Add user</strong>.</li>
-      <li>Visit <code>https://YOUR-USERNAME.github.io/YOUR-REPO-NAME/</code> (whatever you named it in step 1 above - "batch-tracker" if you kept the default) and sign in. You're done.</li>
+      <li>Visit <code>https://YOUR-USERNAME.github.io/YOUR-REPO-NAME/</code> (whatever you named your repo above) and sign in. You're done.</li>
     </ol>
     <p class="hint">config.js holds your anon key - that's meant to be public/client-visible, it's the Row Level Security rules from Step 2 that actually protect your data, not secrecy of this key.</p>
   </section>
