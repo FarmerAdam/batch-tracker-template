@@ -18,6 +18,15 @@ Prefer a terminal? `setup.js` does the same schema-push + config-write in
 one command (`npm install && npm run setup`) - entirely optional, same end
 result either way.
 
+## Analytics
+
+`index.html` and `setup.html` include a small, disclosed, cookie-free visit
+counter ([GoatCounter](https://www.goatcounter.com)) so the maintainer can
+see roughly how much this template gets used - page views and which setup
+steps get reached, nothing about your farm or your Supabase project, which
+never leaves your own account. Delete the `<script data-goatcounter...>` tag
+near the top of either file if you'd rather run with none at all.
+
 ## License
 
 MIT, provided as-is with no warranty - see [`LICENSE`](LICENSE).

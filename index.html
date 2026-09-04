@@ -7,6 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=IBM+Plex+Mono:wght@500&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet">
+<!-- Privacy-friendly, cookie-free visit counter (goatcounter.com) - see setup.html's footer for what this does and doesn't collect. Delete this tag to run with no analytics at all. -->
+<script data-goatcounter="https://mm-batch-tracker.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
@@ -924,10 +926,13 @@ td.neg{color:var(--danger);font-weight:700} td.pos{color:var(--st-complete);font
 <script src="config.js" onerror="window.__configLoadFailed=true"></script>
 <script>
 /* ================= CONFIG ================= */
+function track(eventName){ try{ if(window.goatcounter && typeof window.goatcounter.count==="function") window.goatcounter.count({path:eventName,title:eventName,event:true}); }catch(e){} }
 if(window.__configLoadFailed || typeof window.SUPABASE_URL==="undefined" || typeof window.SUPABASE_KEY==="undefined"){
+  track("app-loaded-no-config");
   document.write('<div style="font:16px system-ui;padding:40px;max-width:600px;margin:0 auto"><h2>Setup incomplete</h2><p><code>config.js</code> is missing or did not define <code>SUPABASE_URL</code>/<code>SUPABASE_KEY</code>. Open <code>setup.html</code> for a guided setup, or copy <code>config.example.js</code> to <code>config.js</code> and fill in your Supabase project URL and anon key (see <code>SETUP-WITH-AI.md</code>).</p></div>');
   throw new Error("Missing config.js - SUPABASE_URL/SUPABASE_KEY not set");
 }
+track("app-loaded-with-config");
 const SUPABASE_URL = window.SUPABASE_URL;
 const SUPABASE_KEY = window.SUPABASE_KEY;
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
