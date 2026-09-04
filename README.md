@@ -20,6 +20,10 @@ result either way.
 
 ## License
 
-MIT, provided as-is with no warranty - see [`LICENSE`](LICENSE). Each
-deployment runs on the grower's own Supabase + GitHub accounts; you're
-responsible for your own data and any costs on your own accounts.
+MIT, provided as-is with no warranty - see [`LICENSE`](LICENSE).
+
+This is a self-hosted template: each grower runs their own copy against
+their own Supabase project and is solely responsible for their own data,
+backups, security configuration, and any costs on their own accounts. The
+original author provides no support, uptime guarantee, or liability for any
+individual deployment.

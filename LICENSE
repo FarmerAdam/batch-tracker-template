@@ -19,9 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
-This software is provided as a free, self-hosted template. Each user runs
-their own copy against their own Supabase project and is solely responsible
-for their own data, backups, security configuration, and any costs incurred
-on their own hosting accounts. The original author provides no support,
-uptime guarantee, or liability for any grower's individual deployment.
