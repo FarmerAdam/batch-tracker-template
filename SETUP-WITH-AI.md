@@ -20,10 +20,11 @@ You are helping a grower (who may have no coding background) self-host their
 own copy of "Batch Tracker," a single-page web app (`index.html`) backed by
 Supabase (hosted Postgres + auth + REST API). The repo includes `setup.html`
 - a self-contained setup wizard the grower opens directly in their browser
-(double-click the file, or open it once they've deployed). It walks through
-the same 5 steps below, copies the schema SQL for them with one click, and
-live-tests their Project URL/anon key before generating `config.js` for
-download - **tell them to open it and use that as the default path**. It
+(double-click the file, or open it once they've deployed), with its own 5
+steps covering everything Step 3 below does. It copies the schema SQL for
+them with one click and live-tests their Project URL/anon key before
+generating `config.js` for download - **tell them to open it and use that
+as the default path**. It
 can't do the GitHub/Supabase account and dashboard parts (those need
 interactive sign-in), which is where you come in - walk them through those,
 and through `setup.html`'s own steps as they go. If they'd rather not open a
@@ -67,8 +68,10 @@ Tell the grower to:
 ### Step 3 - Push the schema and connect your project
 
 **Default: open `setup.html`** at
-`https://THEIR-USERNAME.github.io/batch-tracker/setup.html` (from Step 2.3
-above) - or by double-clicking the local file if they skipped that step. It
+`https://THEIR-USERNAME.github.io/THEIR-REPO-NAME/setup.html` (the repo name
+is whatever they picked in Step 2.2 - "batch-tracker" if they kept the
+default, something else if they renamed it) - or by double-clicking the
+local file if they skipped Step 2.3. It
 walks through pushing the schema and connecting the project itself, with a
 live "Test connection" check before it lets them download `config.js` - talk
 them through its on-page steps as they go, using the details below only if
@@ -180,7 +183,8 @@ described here.
 
 ### Step 6 - Confirm it's live
 
-Visit `https://THEIR-USERNAME.github.io/batch-tracker/`. They should see a
+Visit `https://THEIR-USERNAME.github.io/THEIR-REPO-NAME/` (same repo name as
+Step 3 above). They should see a
 login screen with a generic "Batch Tracker" title (not "Markwood"). Sign in
 with the user from Step 4. That's it - fully self-hosted, on their own
 accounts, at no cost. If they get a blank page or a "Setup incomplete"
@@ -199,8 +203,8 @@ below, which doesn't need a live browser request at that step.
 
 **"config.js is missing" error banner on the page**
 `config.js` doesn't exist yet, or wasn't committed to the live repo. Redo
-Step 3.5 (Option A) - create/commit `config.js` via GitHub's web UI, or run
-`npm run setup` again if using Option B.
+Step 3's "Create config.js" item (Option A) - create/commit it via GitHub's
+web UI, or run `npm run setup` again if using Option B.
 
 **"That's a Secret key / service_role key" error, or the site loads but
 nothing ever seems protected by login**

@@ -139,7 +139,7 @@ footer.page{text-align:center;color:var(--muted);font-size:12px;margin-top:20px}
       <li>In your new repo: <strong>Settings → Pages</strong> → Source = "Deploy from a branch", Branch = <code>main</code> / <code>(root)</code> → Save. Takes 1-2 minutes. (If you got here by opening this exact page at a <code>github.io</code> address already, Pages is already on - skip this.)</li>
       <li>Add the <code>config.js</code> you downloaded in Step 4 to your repo, next to <code>index.html</code> - easiest via <strong>Add file → Upload files</strong> on your repo's GitHub page (no local tools needed), then commit. Wait ~1 minute for the site to rebuild.</li>
       <li>Create your first login: in Supabase, <strong>Authentication → Users → Add user</strong>.</li>
-      <li>Visit <code>https://YOUR-USERNAME.github.io/batch-tracker/</code> and sign in. You're done.</li>
+      <li>Visit <code>https://YOUR-USERNAME.github.io/YOUR-REPO-NAME/</code> (whatever you named it in step 1 above - "batch-tracker" if you kept the default) and sign in. You're done.</li>
     </ol>
     <p class="hint">config.js holds your anon key - that's meant to be public/client-visible, it's the Row Level Security rules from Step 2 that actually protect your data, not secrecy of this key.</p>
   </section>
@@ -570,6 +570,7 @@ function makeZip(files) {
 const PACKAGE_FILES = [
   "index.html", "setup.html", "setup.js", "schema.sql", "package.json",
   "README.md", "LICENSE", "SETUP-WITH-AI.md", "config.example.js", ".gitignore",
+  ".nojekyll",
 ];
 
 document.getElementById("downloadZipBtn").addEventListener("click", async () => {

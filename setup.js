@@ -270,10 +270,17 @@ async function main() {
   console.log("  1. Open index.html locally (or `python3 -m http.server`) and confirm you can");
   console.log("     see a login screen. Create your first user under Authentication -> Users");
   console.log("     in the Supabase dashboard, then sign in.");
-  console.log("  2. git add -A && git commit -m 'Configure my Supabase project' && git push");
+  console.log("  2. config.js is gitignored on purpose - a plain `git add -A` will silently skip");
+  console.log("     it, which would leave your deployed site stuck on 'Setup incomplete' with no");
+  console.log("     error telling you why. To actually get it onto your deployed site, either:");
+  console.log("       a) git add -f config.js && git add -A && git commit -m 'Configure my Supabase project' && git push");
+  console.log("          (this puts your anon key in your repo's history - fine, it's meant to be");
+  console.log("          public/client-visible, see README's Analytics/License notes), or");
+  console.log("       b) leave it out of git and upload config.js separately through GitHub's web");
+  console.log("          UI (Add file -> Upload files) after pushing everything else.");
   console.log("  3. In your GitHub fork: Settings -> Pages -> Deploy from branch -> main.");
-  console.log("\nconfig.js is gitignored on purpose and will NOT be pushed - that's correct,");
-  console.log("your key lives only in your own deployed copy.\n");
+  console.log("  4. Once Pages finishes building, reload your live site - the 'Setup incomplete'");
+  console.log("     banner should be gone.\n");
 }
 
 function isJwt(s) {
