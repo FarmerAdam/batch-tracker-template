@@ -102,12 +102,18 @@ footer.page{text-align:center;color:var(--muted);font-size:12px;margin-top:20px}
 
   <section class="step" id="step3">
     <h2><span class="num">3</span> Connect your project<span class="done-badge" id="connectBadge">✓ Connected</span></h2>
-    <p class="sub">From your Supabase dashboard: <strong>Project Settings → API</strong>.</p>
+    <p class="sub">In your Supabase dashboard, find the API settings page:</p>
+    <ol class="plain">
+      <li>Click the <strong>⚙ Settings</strong> icon near the bottom of the left sidebar.</li>
+      <li>Click <strong>API Keys</strong> in the menu that opens (on some projects this is just called <strong>API</strong> - same page either way).</li>
+      <li>Near the top you'll see your <strong>Project URL</strong> - copy it into the box below.</li>
+      <li>Below that is a list of keys. You want the <strong>safe-to-share</strong> one - labeled either <strong>"Publishable key"</strong> (starts <code>sb_publishable_...</code>) or, on older projects, <strong>"anon" / "public"</strong> (a long string starting <code>eyJ...</code>). Copy that one into the second box.</li>
+    </ol>
+    <p class="hint"><strong>Do not</strong> copy the other key on that page - labeled <strong>"Secret key"</strong> (<code>sb_secret_...</code>) or, on older projects, <strong>"service_role"</strong>. That one bypasses all your security rules and must never go in a file a browser can see. If you're ever unsure which is which, paste it below anyway - Step 3's test will refuse it and tell you.</p>
     <label for="projUrl">Project URL</label>
     <input type="text" id="projUrl" placeholder="https://xxxxxxxx.supabase.co" autocomplete="off" spellcheck="false">
-    <label for="anonKey">anon public key</label>
-    <input type="password" id="anonKey" placeholder="eyJhbGc... or sb_publishable_..." autocomplete="off" spellcheck="false">
-    <p class="hint">There's also a <code>service_role</code> / <code>secret</code> key on that page - don't use that one here, it must never appear in a browser-facing file.</p>
+    <label for="anonKey">Publishable / anon key</label>
+    <input type="password" id="anonKey" placeholder="sb_publishable_... or eyJhbGc..." autocomplete="off" spellcheck="false">
     <div class="actions">
       <button class="btn" id="testBtn" type="button">Test connection</button>
     </div>
@@ -398,15 +404,15 @@ document.getElementById("testBtn").addEventListener("click", async () => {
   updateDownloadState();
 
   if (!/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(url)) {
-    setStatus(statusEl, false, "That doesn't look like a Supabase project URL. It should look like https://abcdefghijklmnop.supabase.co (Project Settings → API → Project URL).");
+    setStatus(statusEl, false, "That doesn't look like a Supabase project URL. It should look like https://abcdefghijklmnop.supabase.co - find it under the ⚙ Settings icon → API Keys, near the top of that page.");
     return;
   }
   if (key.startsWith("sb_secret_") || (isJwt(key) && jwtRole(key) === "service_role")) {
-    setStatus(statusEl, false, "That's a SERVICE ROLE / secret key, not the anon key. It bypasses all security rules and must never go in a browser-facing file. Copy the key labeled \"anon\" / \"public\" instead.");
+    setStatus(statusEl, false, "That's a \"Secret key\" / service_role key, not the publishable/anon one. It bypasses all security rules and must never go in a browser-facing file. Go back to ⚙ Settings → API Keys and copy the one labeled \"Publishable key\" (or \"anon\"/\"public\" on older projects) instead.");
     return;
   }
   if (!isJwt(key) && !key.startsWith("sb_publishable_")) {
-    setStatus(statusEl, false, "That doesn't look like a valid anon key. It should start with \"eyJ\" (older projects) or \"sb_publishable_\" (newer projects). Copy it again from Project Settings → API.");
+    setStatus(statusEl, false, "That doesn't look like a valid key. It should start with \"eyJ\" (older projects, labeled \"anon\"/\"public\") or \"sb_publishable_\" (newer projects, labeled \"Publishable key\"). Copy it again from ⚙ Settings → API Keys.");
     return;
   }
 
