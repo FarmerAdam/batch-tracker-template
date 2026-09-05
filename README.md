@@ -36,6 +36,7 @@ Entirely optional, never required to use or deploy this.
 
 ## License
 
+Copyright (C) 2026 Markwood Mushrooms.
 [AGPL-3.0](https://www.gnu.org/licenses/agpl-3.0.html), provided as-is with
 no warranty - see [`LICENSE`](LICENSE). You're free to use, modify, and even
 sell hosting/support around this - the one condition is that if you modify
