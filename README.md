@@ -36,7 +36,14 @@ Entirely optional, never required to use or deploy this.
 
 ## License
 
-MIT, provided as-is with no warranty - see [`LICENSE`](LICENSE).
+[AGPL-3.0](https://www.gnu.org/licenses/agpl-3.0.html), provided as-is with
+no warranty - see [`LICENSE`](LICENSE). You're free to use, modify, and even
+sell hosting/support around this - the one condition is that if you modify
+it and let other users interact with your version over a network (including
+just running it for your own farm's staff), you make your modified source
+available to them too. That's the copyleft trade: free to build on, not free
+to enclose - improvements stay part of the commons instead of disappearing
+into someone's private, closed-off fork.
 
 This is a self-hosted template: each grower runs their own copy against
 their own Supabase project and is solely responsible for their own data,
