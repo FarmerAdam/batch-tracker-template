@@ -1414,6 +1414,78 @@ async function applyHarvestSuggestion(species, lo, hi){
   if(error){ alert("Couldn't update — "+error.message); return; }
   await loadAll();
 }
+
+/* ================= YIELD DEFAULTS PANEL =================
+   Lets a grower manually set the curated yield_kg_per_block / harvest-timing
+   defaults per species (previously only editable by hand in Supabase - see
+   2026-09-06 conversation). Once SECOND_FLUSH_MIN_SAMPLES real harvests are
+   logged for a species' flush 1 or flush 2, the panel shows that learned
+   average alongside the curated estimate, same threshold the weekly
+   forecast above already uses to prefer real data over the curated guess. */
+let extraYieldSpeciesRows=[]; // session-only unsaved species added via "+ Add species", cleared on reload
+function yieldDefaultsSpeciesList(){
+  const known=new Set([...orderedCostSpecies(), ...yieldDefaults.map(y=>y.species)].map(s=>s.toLowerCase()));
+  const base=[...new Set([...orderedCostSpecies(), ...yieldDefaults.map(y=>y.species)])];
+  const extra=extraYieldSpeciesRows.filter(sp=>!known.has(sp.toLowerCase()));
+  return [...base, ...extra];
+}
+function yieldDefaultsPanelHTML(){
+  const {avg:flushAvg, counts:flushCounts}=computeSpeciesFlushYieldKg();
+  const species=yieldDefaultsSpeciesList();
+  const learnedCell=(sp,flushNum)=>{
+    const key=sp+"|"+flushNum, n=flushCounts[key]||0;
+    if(n<SECOND_FLUSH_MIN_SAMPLES) return `<span style="color:var(--muted)">— (n=${n})</span>`;
+    return `<b>${flushAvg[key].toFixed(2)} kg</b> <span style="color:var(--muted)">(n=${n})</span>`;
+  };
+  const rows=species.map(sp=>{
+    const yd=yieldFor(sp)||{};
+    const sid=sp.replace(/[^a-z0-9]/gi,"_");
+    const spEsc=esc(sp).replace(/'/g,"\\'");
+    return `<tr>
+      <td><b>${esc(sp)}</b></td>
+      <td><input type="number" step="0.1" min="0" id="yd_lo_${sid}" value="${yd.yield_kg_per_block_low??""}" placeholder="low" style="max-width:80px"></td>
+      <td><input type="number" step="0.1" min="0" id="yd_hi_${sid}" value="${yd.yield_kg_per_block_high??""}" placeholder="high" style="max-width:80px"></td>
+      <td><input type="number" step="1" min="0" id="yd_dtf_${sid}" value="${yd.days_to_first_flush??""}" placeholder="days" style="max-width:70px"></td>
+      <td>${learnedCell(sp,1)}</td>
+      <td>${learnedCell(sp,2)}</td>
+      <td style="display:flex;gap:6px">
+        <button class="btn btn-sm btn-primary" onclick="saveYieldDefault('${spEsc}','${sid}')">Save</button>
+        ${yd.species?`<button class="btn btn-sm btn-danger" title="Delete yield defaults" onclick="deleteYieldDefault('${spEsc}')">&times;</button>`:""}
+      </td>
+    </tr>`;
+  });
+  return `<div class="tablewrap" style="margin-top:28px"><table>
+    <tr><th>Species</th><th colspan="2">Curated yield/block (kg)${infoDot("Your estimated low-high kg per block. Used by the weekly forecast above until enough real harvests are logged for this species/flush.")}</th><th>Days to first flush</th><th>Learned flush 1${infoDot(`Real average from your own logged harvests - replaces the curated estimate once at least ${SECOND_FLUSH_MIN_SAMPLES} flush-1 harvests are logged for this species.`)}</th><th>Learned flush 2</th><th></th></tr>
+    ${rows.length?rows.join(""):`<tr><td colspan="6" class="empty">No species yet - create a batch or add one below.</td></tr>`}
+  </table></div>
+  <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
+    <input type="text" id="ydNewSpecies" placeholder="Add another species..." list="speciesList" style="max-width:220px">
+    <button class="btn btn-sm" onclick="addYieldDefaultSpecies()">+ Add species</button>
+  </div>
+  ${infoBannerHTML("yieldDefaultsPanel", `Set an estimated yield range per block here so the weekly forecast has something to project from for a species with no harvest history yet. Once you've logged at least ${SECOND_FLUSH_MIN_SAMPLES} real weighed harvests for a species' first or second flush, this panel shows your <b>actual learned average</b> alongside the curated estimate - and the forecast automatically switches to using it instead.`, "margin-top:12px")}`;
+}
+async function saveYieldDefault(sp,sid){
+  const num=id=>{ const v=parseFloat($(id).value); return isNaN(v)?null:v; };
+  const rec={species:sp,
+    yield_kg_per_block_low:num("yd_lo_"+sid)??0,
+    yield_kg_per_block_high:num("yd_hi_"+sid)??0,
+    days_to_first_flush:num("yd_dtf_"+sid),
+    updated_at:new Date().toISOString()};
+  const ok=await write(db.from("mn_yield_defaults").upsert(rec,{onConflict:"species"}),"Couldn't save yield defaults");
+  if(ok) extraYieldSpeciesRows=extraYieldSpeciesRows.filter(s=>s.toLowerCase()!==sp.toLowerCase());
+}
+async function deleteYieldDefault(sp){
+  if(!confirm(`Delete yield defaults for "${sp}"? The weekly forecast will stop projecting for this species until you add it back or log enough real harvests.`)) return;
+  await write(db.from("mn_yield_defaults").delete().eq("species",sp),"Couldn't delete yield defaults");
+}
+function addYieldDefaultSpecies(){
+  const inp=$("ydNewSpecies"); const sp=(inp.value||"").trim();
+  if(!sp) return;
+  if(yieldDefaultsSpeciesList().some(s=>s.toLowerCase()===sp.toLowerCase())){ alert(`"${sp}" already has a row above - edit it there.`); return; }
+  extraYieldSpeciesRows=[...extraYieldSpeciesRows,sp];
+  inp.value="";
+  renderAnalytics();
+}
 /* Per-cohort FIFO approach: a batch is often stocked into
    fruiting in stages (e.g. 12 blocks Monday, more Wed/Thu from the same
    inoculation), so each "move to fruiting" event gets its own start date.
@@ -3551,7 +3623,8 @@ function renderAnalytics(){
       <td>${r.packed?money(r.packedRevenue):"—"}</td>
     </tr>`;}).join("")}
   </table></div>${anyMissing?infoBannerHTML("analyticsWeightMissing", `* Some batches don't have block weights recorded, so their substrate cost isn't counted — those species' cost/kg and efficiency are understated until you edit the batch and add block sizes.`, "margin-top:12px"):""}
-  ${infoBannerHTML("analyticsHarvestLearning", `"Fruiting → harvest (actual)" learns from your own data — once at least 3 harvests are logged for a species and the real timing meaningfully differs from what's configured in your yield defaults, you'll see an "Update to Xd?" button here. Nothing changes automatically; it's a suggestion you approve.`, "margin-top:12px")}`;
+  ${infoBannerHTML("analyticsHarvestLearning", `"Fruiting → harvest (actual)" learns from your own data — once at least 3 harvests are logged for a species and the real timing meaningfully differs from what's configured in your yield defaults, you'll see an "Update to Xd?" button here. Nothing changes automatically; it's a suggestion you approve.`, "margin-top:12px")}
+  ${yieldDefaultsPanelHTML()}`;
 }
 
 /* ================= COSTS ================= */
