@@ -112,7 +112,8 @@ create table if not exists mn_costs (
   sale_price_kg numeric,
   note text,
   updated_at timestamptz not null default now(),
-  retail_price_kg numeric
+  retail_price_kg numeric,
+  packed_price_block numeric
 );
 
 create table if not exists mn_settings (

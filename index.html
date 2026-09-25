@@ -1580,6 +1580,14 @@ function firstMoveTo(b,state){ const ms=movements.filter(m=>m.batch_id===b.id&&m
 function costRow(species){ return costs.find(x=>x.species.toLowerCase()===species.toLowerCase()); }
 function salePrice(species){ const c=costRow(species); return c?.sale_price_kg?Number(c.sale_price_kg):null; }
 function retailPrice(species){ const c=costRow(species); return c?.retail_price_kg?Number(c.retail_price_kg):null; }
+// Per-species kit price (2026-09-25, Jonathan's follow-up ask - a single
+// farm-wide $/block rate couldn't reflect a species actually sold at a
+// different kit price). Returns null (not PACKED_PRICE_PER_BLOCK) when
+// unset - callers explicitly fall back to the farm default themselves via
+// `packedPrice(sp) ?? PACKED_PRICE_PER_BLOCK`, same override-with-fallback
+// shape as BLOCK_WATER_L's per-size entries. Blank/zero is "not set", not
+// "free" - same convention salePrice/retailPrice already use above.
+function packedPrice(species){ const c=costRow(species); return c?.packed_price_block?Number(c.packed_price_block):null; }
 /* block-size aware helpers */
 function blockLines(b){ return Array.isArray(b.block_sizes)&&b.block_sizes.length ? b.block_sizes : null; }
 function totalBlocks(b){ const ls=blockLines(b); return ls ? ls.reduce((s,l)=>s+(Number(l.count)||0),0) : (b.blocks_total||0); }
@@ -3609,15 +3617,18 @@ function renderAnalytics(){
     const freshRevenue = (sale!=null && yld>0) ? sale*(yld/1000) : null;
     const freshProfit = (freshRevenue!=null && costKnown) ? freshRevenue-freshCost : null;
     const freshProfitPerBlock = (freshProfit!=null && freshBlocksN>0) ? freshProfit/freshBlocksN : null;
-    // Bug caught by testing before shipping: PACKED_PRICE_PER_BLOCK is a
-    // flat farm-wide rate, independent of whether this species even has a
-    // Costs row - so a species with NO cost row at all (never mind
-    // resolvedPackedCost returning null and packedCost staying 0) would
-    // show a fully fake "profit" implying its blocks cost nothing to make.
-    // Gate on a real cost row existing, same as Cost/kg already does via
-    // costKnown, so this shows "—" (genuinely unknown) instead of a false
-    // number.
-    const kitProfit = (packed>0 && costRow(sp)) ? packed*PACKED_PRICE_PER_BLOCK-packedCost : null;
+    // Per-species kit price (2026-09-25) with a farm-default fallback -
+    // resolved once per species-row here rather than per-batch, since
+    // Analytics is already grouped by species.
+    const kitRate = packedPrice(sp) ?? PACKED_PRICE_PER_BLOCK;
+    // Bug caught by testing before shipping: the packed rate is charged
+    // independent of whether this species even has a Costs row - so a
+    // species with NO cost row at all (never mind resolvedPackedCost
+    // returning null and packedCost staying 0) would show a fully fake
+    // "profit" implying its blocks cost nothing to make. Gate on a real
+    // cost row existing, same as Cost/kg already does via costKnown, so
+    // this shows "—" (genuinely unknown) instead of a false number.
+    const kitProfit = (packed>0 && costRow(sp)) ? packed*kitRate-packedCost : null;
     const kitProfitPerBlock = (kitProfit!=null && packed>0) ? kitProfit/packed : null;
     const yPerKgSub=(subKg>0)?Math.round(yld/subKg):null;       // g yield per kg substrate
     const bePct=(subKg>0)?Math.round((yld/1000)/subKg*100):null; // simple efficiency %
@@ -3631,7 +3642,7 @@ function renderAnalytics(){
       if(differs) harvestSuggestion={lo,hi,n:harvestGapN,configuredLo:yd.days_to_harvest_low,configuredHi:yd.days_to_harvest_high??yd.days_to_harvest_low};
     }
     return {sp,batches:bs.length,inoc,toFruit,contam,failed,packed,yld,subKg,
-      packedRevenue:packed*PACKED_PRICE_PER_BLOCK, packedCost, kitProfit, kitProfitPerBlock,
+      packedRevenue:packed*kitRate, packedCost, kitProfit, kitProfitPerBlock,
       freshProfit, freshProfitPerBlock,
       pctFruit:inoc?Math.round(toFruit/inoc*100):0, pctContam:inoc?Math.round(contam/inoc*100):0,
       pctFailed:inoc?Math.round(failed/inoc*100):0,
@@ -3653,7 +3664,7 @@ function renderAnalytics(){
   $("analyticsWrap").innerHTML=weeklyForecastHTML()+`<div class="tablewrap"><table>
     <tr><th></th><th>Species</th><th>Batches</th><th>Blocks inoc</th><th>→ Fruiting</th><th>Contam</th><th>No colonise</th><th>Packed${infoDot("Blocks marked 'Packed / Ready for Sale' - grow kits sold whole, not harvested here. Kept separate from Total yield/Cost per kg below, which are computed from real logged harvest weight.")}</th><th>Total yield</th>
         ${bd?`<th>Avg days → fruit</th><th>Fruiting → harvest (actual)${infoDot("Real observed time from first move-to-fruiting to first harvest logged — learns as you log more harvests")}</th><th>Avg days → ready${infoDot("Manually logged 'ready to fruit' date, independent of when blocks are physically moved to the fruiting chamber")}</th><th>Avg days → done</th><th>Dry substrate${infoDot("Dry substrate weight — water backed out of the finished block weight")}</th><th>g / fruited block${infoDot(completed?"Yield ÷ blocks that reached fruiting and have since finished their cycle":"Yield ÷ every block ever moved to fruiting, including ones still fruiting now")}</th><th>Yield/kg sub</th><th>Efficiency${infoDot("Biological efficiency — fresh yield ÷ dry substrate weight")}</th>`:""}
-        <th>Cost / kg</th><th>Wholesale $/kg</th><th>Wholesale margin</th><th>Retail $/kg</th><th>Retail margin</th><th>Packed Revenue${infoDot(`Packed blocks × the flat $${PACKED_PRICE_PER_BLOCK}/block rate set in Costs - not a per-kg figure like the columns to its left, and not counted in Cost/kg or margin above.`)}</th><th>Packed Cost${infoDot("A kit's own substrate + spawn/bag/other cost - the same formula Cost/kg uses, scoped to just the blocks that were packed rather than harvested here.")}</th><th>Kit Profit${infoDot("Packed Revenue minus Packed Cost - the grow-kit channel's real profit, not just its revenue.")}</th><th>Fresh Profit${infoDot("Wholesale revenue (yield × Wholesale $/kg) minus this species' fresh-channel cost - a total dollar figure, not the per-kg margin rate shown earlier in this row.")}</th><th>Fresh $/block${infoDot("Fresh Profit ÷ blocks used in the fresh channel - directly comparable to Kit $/block, since both are a profit-per-block figure regardless of how each channel is actually priced.")}</th><th>Kit $/block${infoDot("Kit Profit ÷ packed blocks - the number to compare against Fresh $/block when deciding which channel is actually worth more per block.")}</th></tr>
+        <th>Cost / kg</th><th>Wholesale $/kg</th><th>Wholesale margin</th><th>Retail $/kg</th><th>Retail margin</th><th>Packed Revenue${infoDot(`Packed blocks × this species' own $/block rate if set in Costs, otherwise the farm-wide default of $${PACKED_PRICE_PER_BLOCK} - not a per-kg figure like the columns to its left, and not counted in Cost/kg or margin above.`)}</th><th>Packed Cost${infoDot("A kit's own substrate + spawn/bag/other cost - the same formula Cost/kg uses, scoped to just the blocks that were packed rather than harvested here.")}</th><th>Kit Profit${infoDot("Packed Revenue minus Packed Cost - the grow-kit channel's real profit, not just its revenue.")}</th><th>Fresh Profit${infoDot("Wholesale revenue (yield × Wholesale $/kg) minus this species' fresh-channel cost - a total dollar figure, not the per-kg margin rate shown earlier in this row.")}</th><th>Fresh $/block${infoDot("Fresh Profit ÷ blocks used in the fresh channel - directly comparable to Kit $/block, since both are a profit-per-block figure regardless of how each channel is actually priced.")}</th><th>Kit $/block${infoDot("Kit Profit ÷ packed blocks - the number to compare against Fresh $/block when deciding which channel is actually worth more per block.")}</th></tr>
     ${rows.map(r=>{const spEsc=esc(r.sp).replace(/'/g,"\\'");return `<tr ondragover="speciesDragOver(event)" ondrop="speciesDrop(event,'${spEsc}')">
       <td style="text-align:center"><span class="drag-handle" draggable="true" title="Drag to reorder" ondragstart="speciesDragStart(event,'${spEsc}')" ondragend="speciesDragEnd(event)">&#9776;</span></td>
       <td><b>${esc(r.sp)}</b>${r.weightMissing?' <span title="Some batches have no block weight set — cost/efficiency may be understated" style="color:var(--st-failed)">*</span>':""}</td><td>${r.batches}</td><td>${r.inoc}</td>
@@ -3692,7 +3703,7 @@ function packedPricePanelHTML(){
   return `<div class="tablewrap" style="margin-top:28px"><table class="costs-table">
     <tr><th>Packed / Ready for Sale</th><th></th></tr>
     <tr>
-      <td>$/block <span style="color:var(--muted);font-size:12px">— flat rate for grow kits, all species (see Analytics' Packed Revenue column)</span></td>
+      <td>Default $/block <span style="color:var(--muted);font-size:12px">— used for any species that hasn't set its own "Kit $/block" rate above (see Analytics' Packed Revenue column)</span></td>
       <td style="display:flex;gap:8px;align-items:center">
         <input type="number" step="1" min="0" id="packedPriceInput" value="${PACKED_PRICE_PER_BLOCK}" style="max-width:120px">
         <button class="btn btn-sm btn-primary" onclick="savePackedPrice()">Save</button>
@@ -3723,7 +3734,7 @@ function renderCosts(){
   const sizes=Object.keys(BLOCK_WATER_L).map(Number).sort((a,b)=>b-a);
   if(!species.length){ $("costsWrap").innerHTML=`<div class="empty">Create a batch first — its species will show up here.</div>`+packedPricePanelHTML()+blockWaterPanelHTML(); return; }
   $("costsWrap").innerHTML=`<div class="tablewrap"><table class="costs-table">
-    <tr><th></th><th>Species</th><th>Substrate $/kg</th><th>Spawn $/block</th><th>Bag $/block</th><th>Other $/block</th>${sizes.map(s=>`<th>${s%1?s.toFixed(1):s}kg block</th>`).join("")}<th>Wholesale $/kg</th><th>Retail $/kg</th><th></th></tr>
+    <tr><th></th><th>Species</th><th>Substrate $/kg</th><th>Spawn $/block</th><th>Bag $/block</th><th>Other $/block</th>${sizes.map(s=>`<th>${s%1?s.toFixed(1):s}kg block</th>`).join("")}<th>Wholesale $/kg</th><th>Retail $/kg</th><th>Kit $/block${infoDot(`This species' own grow-kit price - leave blank to use the farm-wide default set below (currently $${PACKED_PRICE_PER_BLOCK}).`)}</th><th></th></tr>
     ${species.map((sp,i)=>{
       const c=costs.find(x=>x.species.toLowerCase()===sp.toLowerCase())||{};
       const sid=sp.replace(/[^a-z0-9]/gi,"_");
@@ -3740,6 +3751,7 @@ function renderCosts(){
         ${sizes.map(s=>`<td><b>${money(subkg*dryKgForLine({kg:s})+extras)}</b></td>`).join("")}
         <td><input type="number" step="0.5" id="c_sale_${sid}" value="${c.sale_price_kg??""}" placeholder="e.g. 45"></td>
         <td><input type="number" step="0.5" id="c_retail_${sid}" value="${c.retail_price_kg??""}" placeholder="e.g. 60"></td>
+        <td><input type="number" step="1" min="0" id="c_packed_${sid}" value="${c.packed_price_block??""}" placeholder="default $${PACKED_PRICE_PER_BLOCK}"></td>
         <td style="display:flex;gap:6px"><button class="btn btn-sm btn-primary" onclick="saveCost('${spEsc}','${sid}')">Save</button>${c.id?`<button class="btn btn-sm btn-danger" title="Delete cost entry" onclick="deleteCost('${spEsc}')">&times;</button>`:""}</td>
       </tr>`;}).join("")}
   </table></div>
@@ -3752,7 +3764,8 @@ async function saveCost(sp,sid){
   const rec={species:sp, substrate_cost:num("c_sub_"+sid), spawn_cost:num("c_spw_"+sid),
     bag_cost:num("c_bag_"+sid), other_cost:num("c_oth_"+sid),
     sale_price_kg:parseFloat($("c_sale_"+sid).value)||null,
-    retail_price_kg:parseFloat($("c_retail_"+sid).value)||null, updated_at:new Date().toISOString()};
+    retail_price_kg:parseFloat($("c_retail_"+sid).value)||null,
+    packed_price_block:parseFloat($("c_packed_"+sid).value)||null, updated_at:new Date().toISOString()};
   await write(db.from("mn_costs").upsert(rec,{onConflict:"species"}),"Couldn't save costs");
 }
 async function deleteCost(sp){
