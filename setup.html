@@ -289,7 +289,7 @@ create table if not exists mn_placements (
 
 create table if not exists mn_costs (
   id uuid primary key default gen_random_uuid(),
-  species text not null,
+  species text not null unique,
   substrate_cost numeric not null default 0,
   spawn_cost numeric not null default 0,
   bag_cost numeric not null default 0,
