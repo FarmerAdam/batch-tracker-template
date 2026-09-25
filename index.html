@@ -1662,6 +1662,24 @@ function resolvedBatchCost(b){
   const sub=(kg!=null)?subPerKg(b.species)*kg:0;
   return {cost:extras+sub, hasWeight:kg!=null, kg};
 }
+/* Kit-channel twin of resolvedBatchCost, added 2026-09-25 for real
+   profitability reporting (a template user, Jonathan, asked for a
+   profit breakdown across fresh AND grow kits, not just a cost
+   breakdown) - same per-block cost formula (substrate $/kg dry x actual
+   dry kg, plus per-block spawn/bag/other), scoped to "packed" blocks via
+   sizesInState instead of RESOLVED_STATES. "packed" is already a
+   terminal/resolved state the moment a block reaches it (see
+   batchColumn's own comment on this) - unlike complete/contaminated/
+   failed/culled, it never needs a completed-vs-lifetime split, so this
+   one function serves both Analytics views. */
+function resolvedPackedCost(b){
+  const c=costRow(b.species); if(!c) return null;
+  let blocks=0, kg=0;
+  for(const {kg:sizeKg,count} of sizesInState(b,"packed")){ blocks+=count; kg+=count*dryKgForLine({kg:sizeKg}); }
+  const extras=perBlockExtras(b.species)*blocks;
+  const sub=subPerKg(b.species)*kg;
+  return {cost:extras+sub, blocks, hasWeight:blockLines(b)!=null};
+}
 
 /* ================= DATA ================= */
 function cache(){ try{ localStorage.setItem("mn_cache", JSON.stringify({batches,movements,harvests,costs,rooms,zones,bays,placements,yieldDefaults,batchNotes})); }catch(e){} }
@@ -3525,10 +3543,14 @@ function renderAnalytics(){
   }
   const rows=Object.entries(bySpecies).map(([sp,bs])=>{
     let inoc=0,toFruit=0,contam=0,failed=0,culled=0,packed=0,yld=0,subKg=0,totalCost=0,costKnown=false,weightMissing=false;
-    let fruitedDenom=0;
+    let fruitedDenom=0, resolvedBlocksN=0, packedCost=0;
     let fruitDays=[],completeDays=[],readyDays=[],harvestGapDays=[];
     for(const b of bs){
       inoc+=totalBlocks(b); yld+=batchYield(b);
+      resolvedBlocksN+=resolvedBlockCount(b);
+
+      const pc=resolvedPackedCost(b);
+      if(pc){ packedCost+=pc.cost; if(pc.blocks>0 && !pc.hasWeight) weightMissing=true; }
 
       if(completed){
         const sk=resolvedSubKg(b); if(sk!=null) subKg+=sk; else if(resolvedBlockCount(b)>0) weightMissing=true;
@@ -3565,6 +3587,38 @@ function renderAnalytics(){
     const costKg=(costKnown&&yld>0)?totalCost/(yld/1000):null;
     const margin=(costKg!=null&&sale!=null)?sale-costKg:null;
     const retailMargin=(costKg!=null&&retail!=null)?retail-costKg:null;
+    // Real profitability, not just a cost/kg rate (2026-09-25, from
+    // Jonathan's template feedback: "not just a costs breakdown, but a
+    // profitability breakdown across fresh AND grow kits"). Two channels,
+    // two totally different pricing units (fresh sells by $/kg, kits sell
+    // flat $/block) - "$ profit per block committed to that channel" is
+    // the one number both can be compared on.
+    //
+    // In the Completed view, totalCost already excludes packed cost
+    // entirely (resolvedBatchCost is scoped to RESOLVED_STATES, which
+    // excludes "packed" - see that function's own comment, built 2026-09-01
+    // specifically so kit cost never pollutes fresh-channel numbers). In
+    // the lifetime view, totalCost pools EVERY block the batch ever
+    // contained (batchCost/totalBlocks aren't state-scoped at all), packed
+    // included - so packedCost is explicitly backed out here for this NEW
+    // figure only. The existing Cost/kg column above is deliberately left
+    // untouched by this - it's a separate, already-shipped number, and
+    // changing what it displays wasn't part of this ask.
+    const freshCost = completed ? totalCost : Math.max(0, totalCost-packedCost);
+    const freshBlocksN = completed ? resolvedBlocksN : Math.max(0, inoc-packed);
+    const freshRevenue = (sale!=null && yld>0) ? sale*(yld/1000) : null;
+    const freshProfit = (freshRevenue!=null && costKnown) ? freshRevenue-freshCost : null;
+    const freshProfitPerBlock = (freshProfit!=null && freshBlocksN>0) ? freshProfit/freshBlocksN : null;
+    // Bug caught by testing before shipping: PACKED_PRICE_PER_BLOCK is a
+    // flat farm-wide rate, independent of whether this species even has a
+    // Costs row - so a species with NO cost row at all (never mind
+    // resolvedPackedCost returning null and packedCost staying 0) would
+    // show a fully fake "profit" implying its blocks cost nothing to make.
+    // Gate on a real cost row existing, same as Cost/kg already does via
+    // costKnown, so this shows "—" (genuinely unknown) instead of a false
+    // number.
+    const kitProfit = (packed>0 && costRow(sp)) ? packed*PACKED_PRICE_PER_BLOCK-packedCost : null;
+    const kitProfitPerBlock = (kitProfit!=null && packed>0) ? kitProfit/packed : null;
     const yPerKgSub=(subKg>0)?Math.round(yld/subKg):null;       // g yield per kg substrate
     const bePct=(subKg>0)?Math.round((yld/1000)/subKg*100):null; // simple efficiency %
     const gPerBlockDenom = completed ? fruitedDenom : toFruit;
@@ -3577,7 +3631,8 @@ function renderAnalytics(){
       if(differs) harvestSuggestion={lo,hi,n:harvestGapN,configuredLo:yd.days_to_harvest_low,configuredHi:yd.days_to_harvest_high??yd.days_to_harvest_low};
     }
     return {sp,batches:bs.length,inoc,toFruit,contam,failed,packed,yld,subKg,
-      packedRevenue:packed*PACKED_PRICE_PER_BLOCK,
+      packedRevenue:packed*PACKED_PRICE_PER_BLOCK, packedCost, kitProfit, kitProfitPerBlock,
+      freshProfit, freshProfitPerBlock,
       pctFruit:inoc?Math.round(toFruit/inoc*100):0, pctContam:inoc?Math.round(contam/inoc*100):0,
       pctFailed:inoc?Math.round(failed/inoc*100):0,
       avgFruit:avg(fruitDays), avgComplete:wavg(completeDays), avgReady:avg(readyDays), readyCount:readyDays.length,
@@ -3598,7 +3653,7 @@ function renderAnalytics(){
   $("analyticsWrap").innerHTML=weeklyForecastHTML()+`<div class="tablewrap"><table>
     <tr><th></th><th>Species</th><th>Batches</th><th>Blocks inoc</th><th>→ Fruiting</th><th>Contam</th><th>No colonise</th><th>Packed${infoDot("Blocks marked 'Packed / Ready for Sale' - grow kits sold whole, not harvested here. Kept separate from Total yield/Cost per kg below, which are computed from real logged harvest weight.")}</th><th>Total yield</th>
         ${bd?`<th>Avg days → fruit</th><th>Fruiting → harvest (actual)${infoDot("Real observed time from first move-to-fruiting to first harvest logged — learns as you log more harvests")}</th><th>Avg days → ready${infoDot("Manually logged 'ready to fruit' date, independent of when blocks are physically moved to the fruiting chamber")}</th><th>Avg days → done</th><th>Dry substrate${infoDot("Dry substrate weight — water backed out of the finished block weight")}</th><th>g / fruited block${infoDot(completed?"Yield ÷ blocks that reached fruiting and have since finished their cycle":"Yield ÷ every block ever moved to fruiting, including ones still fruiting now")}</th><th>Yield/kg sub</th><th>Efficiency${infoDot("Biological efficiency — fresh yield ÷ dry substrate weight")}</th>`:""}
-        <th>Cost / kg</th><th>Wholesale $/kg</th><th>Wholesale margin</th><th>Retail $/kg</th><th>Retail margin</th><th>Packed Revenue${infoDot(`Packed blocks × the flat $${PACKED_PRICE_PER_BLOCK}/block rate set in Costs - not a per-kg figure like the columns to its left, and not counted in Cost/kg or margin above.`)}</th></tr>
+        <th>Cost / kg</th><th>Wholesale $/kg</th><th>Wholesale margin</th><th>Retail $/kg</th><th>Retail margin</th><th>Packed Revenue${infoDot(`Packed blocks × the flat $${PACKED_PRICE_PER_BLOCK}/block rate set in Costs - not a per-kg figure like the columns to its left, and not counted in Cost/kg or margin above.`)}</th><th>Packed Cost${infoDot("A kit's own substrate + spawn/bag/other cost - the same formula Cost/kg uses, scoped to just the blocks that were packed rather than harvested here.")}</th><th>Kit Profit${infoDot("Packed Revenue minus Packed Cost - the grow-kit channel's real profit, not just its revenue.")}</th><th>Fresh Profit${infoDot("Wholesale revenue (yield × Wholesale $/kg) minus this species' fresh-channel cost - a total dollar figure, not the per-kg margin rate shown earlier in this row.")}</th><th>Fresh $/block${infoDot("Fresh Profit ÷ blocks used in the fresh channel - directly comparable to Kit $/block, since both are a profit-per-block figure regardless of how each channel is actually priced.")}</th><th>Kit $/block${infoDot("Kit Profit ÷ packed blocks - the number to compare against Fresh $/block when deciding which channel is actually worth more per block.")}</th></tr>
     ${rows.map(r=>{const spEsc=esc(r.sp).replace(/'/g,"\\'");return `<tr ondragover="speciesDragOver(event)" ondrop="speciesDrop(event,'${spEsc}')">
       <td style="text-align:center"><span class="drag-handle" draggable="true" title="Drag to reorder" ondragstart="speciesDragStart(event,'${spEsc}')" ondragend="speciesDragEnd(event)">&#9776;</span></td>
       <td><b>${esc(r.sp)}</b>${r.weightMissing?' <span title="Some batches have no block weight set — cost/efficiency may be understated" style="color:var(--st-failed)">*</span>':""}</td><td>${r.batches}</td><td>${r.inoc}</td>
@@ -3621,6 +3676,11 @@ function renderAnalytics(){
       <td>${r.retail!=null?money(r.retail):"—"}</td>
       <td class="${r.retailMargin==null?"":r.retailMargin<0?"neg":"pos"}">${r.retailMargin!=null?money(r.retailMargin):"—"}</td>
       <td>${r.packed?money(r.packedRevenue):"—"}</td>
+      <td>${r.packed?money(r.packedCost):"—"}</td>
+      <td class="${r.kitProfit==null?"":r.kitProfit<0?"neg":"pos"}">${r.kitProfit!=null?money(r.kitProfit):"—"}</td>
+      <td class="${r.freshProfit==null?"":r.freshProfit<0?"neg":"pos"}">${r.freshProfit!=null?money(r.freshProfit):"—"}</td>
+      <td class="${r.freshProfitPerBlock==null?"":r.freshProfitPerBlock<0?"neg":"pos"}">${r.freshProfitPerBlock!=null?money(r.freshProfitPerBlock):"—"}</td>
+      <td class="${r.kitProfitPerBlock==null?"":r.kitProfitPerBlock<0?"neg":"pos"}">${r.kitProfitPerBlock!=null?money(r.kitProfitPerBlock):"—"}</td>
     </tr>`;}).join("")}
   </table></div>${anyMissing?infoBannerHTML("analyticsWeightMissing", `* Some batches don't have block weights recorded, so their substrate cost isn't counted — those species' cost/kg and efficiency are understated until you edit the batch and add block sizes.`, "margin-top:12px"):""}
   ${infoBannerHTML("analyticsHarvestLearning", `"Fruiting → harvest (actual)" learns from your own data — once at least 3 harvests are logged for a species and the real timing meaningfully differs from what's configured in your yield defaults, you'll see an "Update to Xd?" button here. Nothing changes automatically; it's a suggestion you approve.`, "margin-top:12px")}
