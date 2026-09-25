@@ -104,7 +104,7 @@ create table if not exists mn_placements (
 
 create table if not exists mn_costs (
   id uuid primary key default gen_random_uuid(),
-  species text not null unique,
+  species text not null,
   substrate_cost numeric not null default 0,
   spawn_cost numeric not null default 0,
   bag_cost numeric not null default 0,
@@ -171,3 +171,30 @@ begin
     );
   end loop;
 end $$;
+
+-- ================= KEEPING AN EXISTING PROJECT UP TO DATE =================
+-- setup.js/setup.html both promise "schema.sql is safe to re-run" as the
+-- standard way to pick up anything added after your first setup. That's
+-- true for brand-new tables/columns/indexes ABOVE this line (every
+-- `create table` up there is `if not exists`, so it does nothing - safely
+-- - on a database that already has that table). It was NOT true for a
+-- column or constraint added to a table that already existed: `create
+-- table if not exists mn_costs (... unique ...)` silently does nothing at
+-- all to a database that already has mn_costs, new column and all -
+-- re-running schema.sql looked successful (no error) but genuinely didn't
+-- add the new column. Found 2026-09-25 while adding packed_price_block.
+--
+-- Anything that needs to reach an EXISTING table goes below instead, using
+-- a form Postgres actually supports re-running against one that's already
+-- caught up (`add column if not exists`, `create index if not exists`) -
+-- this is what makes "just re-run schema.sql" a real, working answer for
+-- an existing install, not just a fresh one.
+alter table mn_costs add column if not exists packed_price_block numeric;
+-- mn_costs.species needs to be unique for the app's upsert(...,{onConflict:
+-- "species"}) calls to work at all (Postgres's ON CONFLICT requires a real
+-- unique or exclusion constraint on the named column, or it errors outright
+-- - see the commit that first added this). A unique INDEX enforces exactly
+-- the same guarantee ON CONFLICT needs, and unlike a table-level UNIQUE
+-- constraint declared inline in `create table`, `create unique index if
+-- not exists` genuinely reaches a table that already exists.
+create unique index if not exists mn_costs_species_key on mn_costs (species);

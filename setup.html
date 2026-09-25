@@ -289,7 +289,7 @@ create table if not exists mn_placements (
 
 create table if not exists mn_costs (
   id uuid primary key default gen_random_uuid(),
-  species text not null unique,
+  species text not null,
   substrate_cost numeric not null default 0,
   spawn_cost numeric not null default 0,
   bag_cost numeric not null default 0,
@@ -352,6 +352,20 @@ begin
     );
   end loop;
 end $$;
+
+-- ================= KEEPING AN EXISTING PROJECT UP TO DATE =================
+-- This file is safe to re-run against a project that's already set up -
+-- every "create table" above is "if not exists", so it does nothing, safely,
+-- on a database that already has that table. That was NOT true for a
+-- column or constraint added to a table that already existed: re-running
+-- looked successful (no error) but genuinely didn't add anything new.
+-- Anything that needs to reach an EXISTING table goes below instead, using
+-- a form Postgres actually supports re-running.
+alter table mn_costs add column if not exists packed_price_block numeric;
+-- mn_costs.species needs to be unique for the app's upsert(...,{onConflict:
+-- "species"}) calls to work at all - a unique index reaches an existing
+-- table the way a table-level "unique" declared inline above cannot.
+create unique index if not exists mn_costs_species_key on mn_costs (species);
 `;
 
 const AI_PROMPT = `# Setting up Batch Tracker - a prompt for your AI assistant
